@@ -23,7 +23,7 @@ class abstractiveRNN(nn.Module):
         attention_type = config.attention_type
         tied_weight_type = config.tied_weight_type
         pre_trained_vector_type = config.pre_trained_vector_type
-        #pre_trained_vector chưa xử lí 
+        pre_trained_vector = None
         padding_idx = config.padding_idx
         num_layers = config.num_layers
         encoder_drop = config.encoder_drop

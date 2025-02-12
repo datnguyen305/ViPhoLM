@@ -1,0 +1,64 @@
+vocab:
+  type: Vocab
+  path: 
+    train: datasets/UIT-ViNewsOnSum-dataset/train.json
+    dev: datasets/UIT-ViNewsOnSum-dataset/dev.json
+    test: datasets/UIT-ViNewsOnSum-dataset/test.json
+  size: 50000
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+
+dataset:
+  train:
+    type: TextSumDataset
+    path: datasets/UIT-ViNewsOnSum-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/UIT-ViNewsOnSum-dataset/dev.json
+  test:
+    type: TextSumDataset
+    path: datasets/UIT-ViNewsOnSum-dataset/test.json
+  batch_size: 8
+  num_workers: 4
+
+
+model:
+  name: closedbook_ViNewsOnSum
+  architecture: closedbook
+  d_model: 256
+  encoder:
+    layer_dim: 1
+    input_dim: 256
+    hidden_size: 256
+    bidirectional: True
+    dropout: 0.1
+  decoder:
+    layer_dim: 1
+    input_dim: 256
+    hidden_size: 256
+    bidirectional: False
+    dropout: 0.1
+  pointer_gen: True
+  is_coverage: False
+  cov_loss_wt: 1.0
+  label_smoothing: 0.1
+  device: cuda
+
+training:
+  checkpoint_path: "checkpoint"
+  learning_rate: 0.15
+  adagrad_init_acc: 0.1
+  rand_unif_init_mag: 0.02
+  trunc_norm_init_std: 1e-4
+  max_grad_norm: 2.0
+  warmup: 50
+  patience: 5
+  score: rouge-L
+  max_iterations: 500000
+  lr_coverage: 0.15
+
+task: TextSumTask

@@ -1,5 +1,4 @@
 import torch
-
 import json
 from collections import Counter
 from builders.vocab_builder import META_VOCAB
