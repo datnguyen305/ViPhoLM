@@ -4,20 +4,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from configs import config
 from numpy import random
 from builders.model_builder import META_ARCHITECTURE
-from rouge_score import rouge_scorer
-from torch.distributions import Categorical
 
-use_cuda = config.use_gpu and torch.cuda.is_available()
+class checking_cuda():
+    def __init__(self,config):
+        self.use_cuda = config.use_gpu and torch.cuda.is_available()
+        self.device = torch.device("cuda" if self.use_cuda else "cpu")
+        self.device = self.device
 
 random.seed(123)
 torch.manual_seed(123)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(123)
 
-def init_lstm_wt(lstm):
+def init_lstm_wt(config, lstm):
     for names in lstm._all_weights:
         for name in names:
             if name.startswith('weight_'):
@@ -31,30 +32,30 @@ def init_lstm_wt(lstm):
                 bias.data.fill_(0.)
                 bias.data[start:end].fill_(1.)
 
-def init_linear_wt(linear):
+def init_linear_wt(config, linear):
     linear.weight.data.normal_(std=config.trunc_norm_init_std)
     if linear.bias is not None:
         linear.bias.data.normal_(std=config.trunc_norm_init_std)
 
-def init_wt_normal(wt):
+def init_wt_normal(config,wt):
     wt.data.normal_(std=config.trunc_norm_init_std)
 
-def init_wt_unif(wt):
+def init_wt_unif(config,wt):
     wt.data.uniform_(-config.rand_unif_init_mag, config.rand_unif_init_mag)
 
 class Encoder(nn.Module):
-    def __init__(self):
+    def __init__(self, config):
         super(Encoder, self).__init__()
         self.embedding = nn.Embedding(config.vocab_size, config.emb_dim)
-        init_wt_normal(self.embedding.weight)
+        init_wt_normal(config, self.embedding.weight)
         
         self.lstm = nn.LSTM(config.emb_dim, config.hidden_dim, num_layers=1, batch_first=True, bidirectional=True)
-        init_lstm_wt(self.lstm)
+        init_lstm_wt(config, self.lstm)
 
         self.W_h = nn.Linear(config.hidden_dim * 2, config.hidden_dim * 2, bias=False)
 
     #seq_lens should be in descending order
-    def forward(self, input, seq_lens):
+    def forward(self,config, input, seq_lens):
         embedded = self.embedding(input)
        
         packed = pack_padded_sequence(embedded, seq_lens, batch_first=True)
@@ -69,15 +70,15 @@ class Encoder(nn.Module):
         return encoder_outputs, encoder_feature, hidden
 
 class ReduceState(nn.Module):
-    def __init__(self):
+    def __init__(self,config):
         super(ReduceState, self).__init__()
 
         self.reduce_h = nn.Linear(config.hidden_dim * 2, config.hidden_dim)
-        init_linear_wt(self.reduce_h)
+        init_linear_wt(config, self.reduce_h)
         self.reduce_c = nn.Linear(config.hidden_dim * 2, config.hidden_dim)
-        init_linear_wt(self.reduce_c)
+        init_linear_wt(config, self.reduce_c)
 
-    def forward(self, hidden):
+    def forward(self,config, hidden):
         h, c = hidden # h, c dim = 2 x b x hidden_dim
         h_in = h.transpose(0, 1).contiguous().view(-1, config.hidden_dim * 2)
         hidden_reduced_h = F.relu(self.reduce_h(h_in))
@@ -87,7 +88,7 @@ class ReduceState(nn.Module):
         return (hidden_reduced_h.unsqueeze(0), hidden_reduced_c.unsqueeze(0)) # h, c dim = 1 x b x hidden_dim
 
 class Attention(nn.Module):
-    def __init__(self):
+    def __init__(self, config):
         super(Attention, self).__init__()
         # attention
         if config.is_coverage:
@@ -95,7 +96,7 @@ class Attention(nn.Module):
         self.decode_proj = nn.Linear(config.hidden_dim * 2, config.hidden_dim * 2)
         self.v = nn.Linear(config.hidden_dim * 2, 1, bias=False)
 
-    def forward(self, s_t_hat, encoder_outputs, encoder_feature, enc_padding_mask, coverage):
+    def forward(self, config, s_t_hat, encoder_outputs, encoder_feature, enc_padding_mask, coverage):
         b, t_k, n = list(encoder_outputs.size())
 
         dec_fea = self.decode_proj(s_t_hat) # B x 2*hidden_dim
@@ -128,18 +129,18 @@ class Attention(nn.Module):
 
         return c_t, attn_dist, coverage
 
-class Pointer_Decoder(nn.Module):
-    def __init__(self):
-        super(Pointer_Decoder, self).__init__()
-        self.attention_network = Attention()
+class Decoder(nn.Module):
+    def __init__(self, config):
+        super(Decoder, self).__init__()
+        self.attention_network = Attention(config)
         # decoder
         self.embedding = nn.Embedding(config.vocab_size, config.emb_dim)
-        init_wt_normal(self.embedding.weight)
+        init_wt_normal(config, self.embedding.weight)
 
         self.x_context = nn.Linear(config.hidden_dim * 2 + config.emb_dim, config.emb_dim)
 
         self.lstm = nn.LSTM(config.emb_dim, config.hidden_dim, num_layers=1, batch_first=True, bidirectional=False)
-        init_lstm_wt(self.lstm)
+        init_lstm_wt(config, self.lstm)
 
         if config.pointer_gen:
             self.p_gen_linear = nn.Linear(config.hidden_dim * 4 + config.emb_dim, 1)
@@ -147,9 +148,9 @@ class Pointer_Decoder(nn.Module):
         #p_vocab
         self.out1 = nn.Linear(config.hidden_dim * 3, config.hidden_dim)
         self.out2 = nn.Linear(config.hidden_dim, config.vocab_size)
-        init_linear_wt(self.out2)
+        init_linear_wt(config, self.out2)
 
-    def forward(self, y_t_1, s_t_1, encoder_outputs, encoder_feature, enc_padding_mask,
+    def forward(self, config, y_t_1, s_t_1, encoder_outputs, encoder_feature, enc_padding_mask,
                 c_t_1, extra_zeros, enc_batch_extend_vocab, coverage, step):
 
         if not self.training and step == 0:
@@ -194,175 +195,93 @@ class Pointer_Decoder(nn.Module):
             if extra_zeros is not None:
                 vocab_dist_ = torch.cat([vocab_dist_, extra_zeros], 1)
 
-            p_attn = vocab_dist_.scatter_add(1, enc_batch_extend_vocab, attn_dist_)
+            final_dist = vocab_dist_.scatter_add(1, enc_batch_extend_vocab, attn_dist_)
         else:
-            p_attn = vocab_dist
+            final_dist = vocab_dist
 
-        return p_attn, s_t, c_t, attn_dist, p_gen, coverage
+        return final_dist, s_t, c_t, attn_dist, p_gen, coverage
 
 class ClosedBookDecoder(nn.Module):
-    def __init__(self):
-        super(ClosedBookDecoder, self).__init__()
-        # Closed-book decoder (Unidirectional LSTM without attention or pointer layer)
-        self.embedding = nn.Embedding(config.vocab_size, config.emb_dim)
-        init_wt_normal(self.embedding.weight)
+    """ Closed-Book Decoder (LSTM không có attention) """
+    def __init__(self, config):
+        super().__init__()
+        self.lstm = nn.LSTM(config.emb_dim, config.hidden_dim, num_layers=1, batch_first=True)
+        self.out = nn.Linear(config.hidden_dim, config.vocab_size)
 
-        self.lstm = nn.LSTM(config.emb_dim, config.hidden_dim, num_layers=1, batch_first=True, bidirectional=False)
-        init_lstm_wt(self.lstm)
-
-        self.out1 = nn.Linear(config.hidden_dim, config.hidden_dim)
-        self.out2 = nn.Linear(config.hidden_dim, config.vocab_size)
-        init_linear_wt(self.out2)
-
-        self.p_cbdec = nn.Linear(config.hidden_dim, 1)  # Probability of closed-book decoder
-
-    def forward(self, y_t_1, s_t_1):
-        y_t_1_embd = self.embedding(y_t_1)
-        lstm_out, s_t = self.lstm(y_t_1_embd.unsqueeze(1), s_t_1)
-
-        output = self.out1(lstm_out.view(-1, config.hidden_dim))
-        output = self.out2(output)  # B x vocab_size
-        vocab_dist = F.softmax(output, dim=1)
-
-        p_cbdec = torch.sigmoid(self.p_cbdec(lstm_out.view(-1, config.hidden_dim)))  # Compute Pcbdec
-
-        return vocab_dist, s_t, p_cbdec
-
-def loss_fn(logits_attn, logits_cbdec, targets, gamma):
-
-    probs_attn = F.softmax(logits_attn, dim=-1)  
-    probs_cbdec = F.softmax(logits_cbdec, dim=-1) 
-
-    target_probs_attn = probs_attn.gather(2, targets.unsqueeze(-1)).squeeze(-1) 
-    target_probs_cbdec = probs_cbdec.gather(2, targets.unsqueeze(-1)).squeeze(-1)  
-
-    log_probs_attn = torch.log(target_probs_attn + 1e-9)  
-    log_probs_cbdec = torch.log(target_probs_cbdec + 1e-9)  
-
-    loss = -((1 - gamma) * log_probs_attn + gamma * log_probs_cbdec)
-
-    return loss.mean()
-
+    def forward(self, encoder_hidden, target_seq):
+        """
+        encoder_hidden: Hidden state từ encoder
+        target_seq: Đầu vào cho decoder (nếu training)
+        """
+        lstm_out, _ = self.lstm(target_seq, encoder_hidden)
+        logits = self.out(lstm_out)  # (batch_size, seq_len, vocab_size)
+        return F.log_softmax(logits, dim=-1)
 
 @META_ARCHITECTURE.register()
-class closedbook(object):
+class closedbook(nn.Module):
     def __init__(self, config, model_file_path=None, is_eval=False):
-        super(closedbook, self).__init__()
+        super().__init__()
+        self.encoder = Encoder(config)
+        self.attn_decoder = Decoder(config)  # Decoder có attention
+        self.cb_decoder = ClosedBookDecoder(config)  # Closed-Book Decoder
+        self.reduce_state = ReduceState(config)
 
-        self.config = config
-        self.device = torch.device("cuda" if config["model"]["device"] == "cuda" and torch.cuda.is_available() else "cpu")
+        self.gamma = config.gamma  # Trọng số giữa hai decoder
 
-        # Tạo encoder và decoder
-        self.encoder = Encoder(config["model"]["encoder"])
-        self.pointer_decoder = Pointer_Decoder(config["model"]["decoder"], config["model"]["pointer_gen"])
-        self.closed_book_decoder = ClosedBookDecoder(config["model"]["decoder"])
-        self.reduce_state = ReduceState(config["model"]["encoder"]["hidden_size"])
+        self.use_cuda = config.use_gpu and torch.cuda.is_available()
 
-        # Chia sẻ embedding giữa encoder và decoder
-        self.pointer_decoder.embedding.weight = self.encoder.embedding.weight
-        self.closed_book_decoder.embedding.weight = self.encoder.embedding.weight
+        # Shared embedding giữa encoder và decoder
+        self.attn_decoder.embedding.weight = self.encoder.embedding.weight
 
         if is_eval:
             self.encoder.eval()
-            self.pointer_decoder.eval()
-            self.closed_book_decoder.eval()
+            self.attn_decoder.eval()
+            self.cb_decoder.eval()
             self.reduce_state.eval()
 
-        self.to(self.device)
+        if self.use_cuda:
+            self.encoder.cuda()
+            self.attn_decoder.cuda()
+            self.cb_decoder.cuda()
+            self.reduce_state.cuda()
 
-    def forward(self, x, x_lens, y, gamma):
-            """
-            Thực hiện huấn luyện với đầu vào và chuỗi mục tiêu.
-            """
-            batch_size = x.size(0)
-            max_len = y.size(1)
-
-            # Mã hóa đầu vào
-            encoder_outputs, encoder_feature, encoder_hidden = self.encoder(x, x_lens)
-            decoder_hidden = self.reduce_state(encoder_hidden)
-
-            # Khởi tạo đầu vào của decoder
-            y_t = torch.full((batch_size,), self.config.bos_idx, dtype=torch.long, device=self.device)
-            c_t = torch.zeros(batch_size, 2 * self.config.hidden_dim, device=self.device)
-
-            logits_attn = []
-            logits_cbdec = []
-
-            for t in range(max_len):
-                # Pointer Decoder
-                logit_attn, decoder_hidden, c_t, _, _, _ = self.pointer_decoder(
-                    y_t, decoder_hidden, encoder_outputs, encoder_feature, 
-                    enc_padding_mask=(x != 0).float(), c_t_1=c_t, 
-                    extra_zeros=None, enc_batch_extend_vocab=x, coverage=None, step=t
-                )
-
-                # Closed Book Decoder
-                logit_cbdec, decoder_hidden, _ = self.closed_book_decoder(y_t, decoder_hidden)
-
-                logits_attn.append(logit_attn.unsqueeze(1))
-                logits_cbdec.append(logit_cbdec.unsqueeze(1))
-
-                y_t = y[:, t]  # Teacher forcing
-
-            logits_attn = torch.cat(logits_attn, dim=1)
-            logits_cbdec = torch.cat(logits_cbdec, dim=1)
-
-            loss = loss_fn(logits_attn, logits_cbdec, y, gamma)
-
-            return loss
-
-    def predict(self, x, x_lens, beam_width=3, max_length=50):
+    def forward(self, input_seq, input_lens, target_seq=None, teacher_forcing_ratio=0.5):
         """
-        Dự đoán chuỗi đầu ra từ đầu vào đã mã hóa.
-        """
-        batch_size = x.size(0)
+        Forward với hai decoder (Attention-based + Closed-Book)
 
-        # Mã hóa đầu vào
-        encoder_outputs, encoder_feature, encoder_hidden = self.encoder(x, x_lens)
+        input_seq: Tensor đầu vào cho encoder (batch_size, seq_len)
+        input_lens: Độ dài thực của mỗi câu trong batch
+        target_seq: Chuỗi đầu ra (chỉ dùng khi training)
+        teacher_forcing_ratio: Xác suất teacher forcing khi training
+
+        return:
+            - combined_outputs: Dự đoán cuối cùng (kết hợp hai decoder)
+            - coverage_loss: Nếu dùng coverage mechanism
+        """
+        # Encode input sequence
+        encoder_outputs, encoder_feature, encoder_hidden = self.encoder(input_seq, input_lens)
+
+        # Giảm trạng thái encoder để dùng cho decoder
         decoder_hidden = self.reduce_state(encoder_hidden)
 
-        # Beam search khởi tạo
-        beams = [(0.0, [self.config.bos_idx], decoder_hidden, torch.zeros(batch_size, 2 * self.config.hidden_dim, device=self.device))]
-        final_sequences = []
+        # Nếu training, sử dụng target_seq
+        if target_seq is not None:
+            # Output từ Attention-based Decoder
+            attn_outputs, coverage_loss = self.attn_decoder(
+                input_seq, encoder_outputs, decoder_hidden, target_seq, teacher_forcing_ratio
+            )
 
-        for _ in range(max_length):
-            new_beams = []
+            # Output từ Closed-Book Decoder
+            cb_outputs = self.cb_decoder(decoder_hidden, target_seq)
 
-            for log_prob, seq, hidden, c_t in beams:
-                y_t = torch.tensor([seq[-1]], dtype=torch.long, device=self.device).unsqueeze(0)
+            # Kết hợp hai output với gamma
+            combined_outputs = (1 - self.gamma) * attn_outputs + self.gamma * cb_outputs
 
-                logit_attn, hidden, c_t, _, _, _ = self.pointer_decoder(
-                    y_t, hidden, encoder_outputs, encoder_feature, 
-                    enc_padding_mask=(x != 0).float(), c_t_1=c_t, 
-                    extra_zeros=None, enc_batch_extend_vocab=x, coverage=None, step=0
-                )
-
-                log_probs = F.log_softmax(logit_attn, dim=-1).squeeze(0)
-                top_log_probs, top_indices = torch.topk(log_probs, beam_width)
-
-                for i in range(beam_width):
-                    new_seq = seq + [top_indices[i].item()]
-                    new_log_prob = log_prob + top_log_probs[i].item()
-
-                    if new_seq[-1] == self.config.eos_idx:
-                        final_sequences.append((new_log_prob, new_seq))
-                    else:
-                        new_beams.append((new_log_prob, new_seq, hidden, c_t))
-
-            # Chọn beam tốt nhất
-            new_beams.sort(reverse=True, key=lambda x: x[0])
-            beams = new_beams[:beam_width]
-
-            if len(beams) == 0:
-                break
-
-        # Chọn chuỗi có log_prob cao nhất
-        if final_sequences:
-            final_sequences.sort(reverse=True, key=lambda x: x[0])
-            best_seq = final_sequences[0][1]
+            return combined_outputs, coverage_loss
         else:
-            best_seq = beams[0][1]
+            # Inference mode (chỉ dự đoán)
+            attn_outputs = self.attn_decoder(input_seq, encoder_outputs, decoder_hidden)
+            cb_outputs = self.cb_decoder(decoder_hidden, input_seq)
 
-        return torch.tensor(best_seq, dtype=torch.long, device=self.device).unsqueeze(0)
-
-
+            combined_outputs = (1 - self.gamma) * attn_outputs + self.gamma * cb_outputs
+            return combined_outputs
