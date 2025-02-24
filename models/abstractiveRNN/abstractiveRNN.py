@@ -187,3 +187,22 @@ class abstractiveRNN(nn.Module):
             encoder_vector = self.encoder_vector_layer(encoder_hidden[-1])
         output = output + (encoder_vector,)  
         return output
+    
+    def predict(self, seq):
+        """Sinh ra câu tóm tắt từ mô hình đã train."""
+        self.eval()  # Chuyển sang chế độ đánh giá (tắt dropout)
+        with torch.no_grad():  
+            batch_size = seq[0].size(0)
+            encoder_hidden = self.init_hidden(batch_size)
+            encoder_input = self.encoder_embedding_layer(seq)
+            encoder_output, encoder_hidden = self.encoder_rnn(encoder_input, encoder_hidden)
+
+            if self.bidirectional:
+                encoder_hidden = self._cat_directions(encoder_hidden)
+
+            # Dự đoán không có nhãn y
+            output, attn_weights, encoder_vector = self.decoder_forward(batch_size, encoder_output, encoder_hidden)
+
+            # Chuyển output thành danh sách token
+            predicted_tokens = output.argmax(-1).tolist()
+        return predicted_tokens
