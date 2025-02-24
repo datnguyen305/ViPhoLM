@@ -192,11 +192,11 @@ class Pointer_Decoder(nn.Module):
             if extra_zeros is not None:
                 vocab_dist_ = torch.cat([vocab_dist_, extra_zeros], 1)
 
-            final_dist = vocab_dist_.scatter_add(1, enc_batch_extend_vocab, attn_dist_)
+            p_attn = vocab_dist_.scatter_add(1, enc_batch_extend_vocab, attn_dist_)
         else:
-            final_dist = vocab_dist
+            p_attn = vocab_dist
 
-        return final_dist, s_t, c_t, attn_dist, p_gen, coverage, output
+        return p_attn, s_t, c_t, attn_dist, p_gen, coverage
 
 class ClosedBookDecoder(nn.Module):
     def __init__(self):
@@ -244,32 +244,99 @@ def loss_fn(logits_attn, logits_cbdec, targets, gamma):
 
 @META_ARCHITECTURE.register()
 class closedbook(object):
-    def __init__(self, model_file_path=None, is_eval=False):
-        encoder = Encoder()
-        self.pointer_decoder = Pointer_Decoder()
-        self.closed_book_decoder = ClosedBookDecoder()
-        reduce_state = ReduceState()
+    def __init__(self, config, model_file_path=None, is_eval=False):
+        super(closedbook, self).__init__()
 
-        # shared the embedding between encoder and decoder
+        self.config = config
+        self.device = torch.device("cuda" if config["model"]["device"] == "cuda" and torch.cuda.is_available() else "cpu")
+
+        # Tạo encoder và decoder
+        self.encoder = Encoder(config["model"]["encoder"])
+        self.pointer_decoder = Pointer_Decoder(config["model"]["decoder"], config["model"]["pointer_gen"])
+        self.closed_book_decoder = ClosedBookDecoder(config["model"]["decoder"])
+        self.reduce_state = ReduceState(config["model"]["encoder"]["hidden_size"])
+
+        # Chia sẻ embedding giữa encoder và decoder
         self.pointer_decoder.embedding.weight = self.encoder.embedding.weight
         self.closed_book_decoder.embedding.weight = self.encoder.embedding.weight
 
         if is_eval:
-            encoder = encoder.eval()
-            decoder = decoder.eval()
-            reduce_state = reduce_state.eval()
+            self.encoder.eval()
+            self.pointer_decoder.eval()
+            self.closed_book_decoder.eval()
+            self.reduce_state.eval()
 
-        if use_cuda:
-            encoder = encoder.cuda()
-            decoder = decoder.cuda()
-            reduce_state = reduce_state.cuda()
+        self.to(self.device)
+    def forward(self, input_ids, labels, enc_padding_mask, extra_zeros, enc_batch_extend_vocab, coverage, step):
+        """
+        Hàm forward của mô hình ClosedBookModel.
+        - input_ids: Dữ liệu đầu vào (chuỗi đã được tokenized).
+        - labels: Nhãn thực tế của câu đầu ra.
+        - enc_padding_mask: Mask để loại bỏ các padding tokens.
+        - extra_zeros: Các từ ngoài vocab gán thành zero vector.
+        - enc_batch_extend_vocab: Đầu vào mở rộng cho pointer-generator.
+        - coverage: Mảng coverage để tránh lặp từ nếu `is_coverage=True`.
+        - step: Bước hiện tại của decoder.
+        """
+        # Encode input
+        encoder_outputs, encoder_hidden = self.encoder(input_ids)
 
-        self.encoder = encoder
-        self.decoder = decoder
-        self.reduce_state = reduce_state
+        # Decode với cả hai decoder
+        logits_attn, _, _, _, _, _, _ = self.pointer_decoder(input_ids, encoder_hidden, encoder_outputs, enc_padding_mask, extra_zeros, enc_batch_extend_vocab, coverage, step)
+        logits_cbdec, _, _ = self.closed_book_decoder(input_ids, encoder_hidden)
 
-        if model_file_path is not None:
-            state = torch.load(model_file_path, map_location= lambda storage, location: storage)
-            self.encoder.load_state_dict(state['encoder_state_dict'])
-            self.decoder.load_state_dict(state['decoder_state_dict'], strict=False)
-            self.reduce_state.load_state_dict(state['reduce_state_dict'])
+        # Tính loss với loss_fn
+        gamma = 0.5  # Hệ số kết hợp giữa pointer-generator và closed-book decoder
+        loss = loss_fn(logits_attn, logits_cbdec, labels, gamma)
+
+        return logits_attn, logits_cbdec, loss
+    import torch
+
+def predict(self, input_text, tokenizer, max_length=100):
+    """
+    Hàm dự đoán đầu ra từ mô hình closedbook.
+    
+    Args:
+        input_text (str): Chuỗi đầu vào.
+        tokenizer: Bộ tokenizer để biến đổi input_text thành tensor.
+        max_length (int): Độ dài tối đa của đầu ra.
+    
+    Returns:
+        str: Câu tóm tắt được sinh ra.
+    """
+    # Chuyển input_text thành tensor
+    input_ids = tokenizer.encode(input_text, return_tensors="pt").to(self.device)
+
+    # Encode input
+    encoder_outputs, encoder_hidden = self.encoder(input_ids)
+
+    # Tạo token bắt đầu
+    decoder_input = torch.tensor([[tokenizer.bos_token_id]], dtype=torch.long).to(self.device)
+
+    decoder_hidden = encoder_hidden
+    output_tokens = []
+
+    for _ in range(max_length):
+        # Dự đoán với cả hai decoder
+        final_dist, _, _, _, _, _, _ = self.pointer_decoder(
+            decoder_input, decoder_hidden, encoder_outputs, None, None, None, None, _
+        )
+        logits_cbdec, _, _ = self.closed_book_decoder(decoder_input, decoder_hidden)
+
+        # Kết hợp hai dự đoán
+        gamma = self.config["model"]["pointer_gen"]
+        logits = (1 - gamma) * torch.log(final_dist + 1e-9) + gamma * logits_cbdec
+
+        # Lấy token có xác suất cao nhất
+        next_token = torch.argmax(logits, dim=-1).item()
+
+        # Nếu gặp token <eos>, dừng lại
+        if next_token == tokenizer.eos_token_id:
+            break
+
+        output_tokens.append(next_token)
+        decoder_input = torch.tensor([[next_token]], dtype=torch.long).to(self.device)
+
+    # Chuyển tokens thành text
+    output_text = tokenizer.decode(output_tokens, skip_special_tokens=True)
+    return output_text

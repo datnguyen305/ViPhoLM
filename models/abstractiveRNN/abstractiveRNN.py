@@ -9,6 +9,7 @@ def to_cuda(tensor):
     if torch.cuda.is_available():
         return tensor.cuda()
     return tensor
+
 @META_ARCHITECTURE.register()
 class abstractiveRNN(nn.Module):
     def __init__(self, config, vocab: Vocab):
