@@ -270,91 +270,99 @@ class closedbook(object):
 
         self.to(self.device)
 
-    def forward(self, input_ids, tokenizer, max_length=100):
-        """
-        Forward cho RL: Sinh greedy summary và sampled summary.
-        """
-        encoder_outputs, encoder_hidden = self.encoder(input_ids)
+    def forward(self, x, x_lens, y, gamma):
+            """
+            Thực hiện huấn luyện với đầu vào và chuỗi mục tiêu.
+            """
+            batch_size = x.size(0)
+            max_len = y.size(1)
 
-        # 1️⃣ Greedy decoding (ŷ)
-        greedy_summary = []
-        decoder_input = torch.tensor([[tokenizer.bos_token_id]], dtype=torch.long).to(self.device)
-        decoder_hidden = encoder_hidden
+            # Mã hóa đầu vào
+            encoder_outputs, encoder_feature, encoder_hidden = self.encoder(x, x_lens)
+            decoder_hidden = self.reduce_state(encoder_hidden)
+
+            # Khởi tạo đầu vào của decoder
+            y_t = torch.full((batch_size,), self.config.bos_idx, dtype=torch.long, device=self.device)
+            c_t = torch.zeros(batch_size, 2 * self.config.hidden_dim, device=self.device)
+
+            logits_attn = []
+            logits_cbdec = []
+
+            for t in range(max_len):
+                # Pointer Decoder
+                logit_attn, decoder_hidden, c_t, _, _, _ = self.pointer_decoder(
+                    y_t, decoder_hidden, encoder_outputs, encoder_feature, 
+                    enc_padding_mask=(x != 0).float(), c_t_1=c_t, 
+                    extra_zeros=None, enc_batch_extend_vocab=x, coverage=None, step=t
+                )
+
+                # Closed Book Decoder
+                logit_cbdec, decoder_hidden, _ = self.closed_book_decoder(y_t, decoder_hidden)
+
+                logits_attn.append(logit_attn.unsqueeze(1))
+                logits_cbdec.append(logit_cbdec.unsqueeze(1))
+
+                y_t = y[:, t]  # Teacher forcing
+
+            logits_attn = torch.cat(logits_attn, dim=1)
+            logits_cbdec = torch.cat(logits_cbdec, dim=1)
+
+            loss = loss_fn(logits_attn, logits_cbdec, y, gamma)
+
+            return loss
+
+    def predict(self, x, x_lens, beam_width=3, max_length=50):
+        """
+        Dự đoán chuỗi đầu ra từ đầu vào đã mã hóa.
+        """
+        batch_size = x.size(0)
+
+        # Mã hóa đầu vào
+        encoder_outputs, encoder_feature, encoder_hidden = self.encoder(x, x_lens)
+        decoder_hidden = self.reduce_state(encoder_hidden)
+
+        # Beam search khởi tạo
+        beams = [(0.0, [self.config.bos_idx], decoder_hidden, torch.zeros(batch_size, 2 * self.config.hidden_dim, device=self.device))]
+        final_sequences = []
+
         for _ in range(max_length):
-            final_dist, _, _, _, _, _, _ = self.pointer_decoder(
-                decoder_input, decoder_hidden, encoder_outputs, None, None, None, None, _
-            )
-            logits_cbdec, _, _ = self.closed_book_decoder(decoder_input, decoder_hidden)
+            new_beams = []
 
-            gamma = self.config["model"]["pointer_gen"]
-            logits = (1 - gamma) * torch.log(final_dist + 1e-9) + gamma * logits_cbdec
+            for log_prob, seq, hidden, c_t in beams:
+                y_t = torch.tensor([seq[-1]], dtype=torch.long, device=self.device).unsqueeze(0)
 
-            next_token = torch.argmax(logits, dim=-1).item()
-            if next_token == tokenizer.eos_token_id:
+                logit_attn, hidden, c_t, _, _, _ = self.pointer_decoder(
+                    y_t, hidden, encoder_outputs, encoder_feature, 
+                    enc_padding_mask=(x != 0).float(), c_t_1=c_t, 
+                    extra_zeros=None, enc_batch_extend_vocab=x, coverage=None, step=0
+                )
+
+                log_probs = F.log_softmax(logit_attn, dim=-1).squeeze(0)
+                top_log_probs, top_indices = torch.topk(log_probs, beam_width)
+
+                for i in range(beam_width):
+                    new_seq = seq + [top_indices[i].item()]
+                    new_log_prob = log_prob + top_log_probs[i].item()
+
+                    if new_seq[-1] == self.config.eos_idx:
+                        final_sequences.append((new_log_prob, new_seq))
+                    else:
+                        new_beams.append((new_log_prob, new_seq, hidden, c_t))
+
+            # Chọn beam tốt nhất
+            new_beams.sort(reverse=True, key=lambda x: x[0])
+            beams = new_beams[:beam_width]
+
+            if len(beams) == 0:
                 break
 
-            greedy_summary.append(next_token)
-            decoder_input = torch.tensor([[next_token]], dtype=torch.long).to(self.device)
+        # Chọn chuỗi có log_prob cao nhất
+        if final_sequences:
+            final_sequences.sort(reverse=True, key=lambda x: x[0])
+            best_seq = final_sequences[0][1]
+        else:
+            best_seq = beams[0][1]
 
-        # 2️⃣ Sampling decoding (y_s)
-        sampled_summary = []
-        log_probs = []
-        decoder_input = torch.tensor([[tokenizer.bos_token_id]], dtype=torch.long).to(self.device)
-        decoder_hidden = encoder_hidden
-        for _ in range(max_length):
-            final_dist, _, _, _, _, _, _ = self.pointer_decoder(
-                decoder_input, decoder_hidden, encoder_outputs, None, None, None, None, _
-            )
-            logits_cbdec, _, _ = self.closed_book_decoder(decoder_input, decoder_hidden)
+        return torch.tensor(best_seq, dtype=torch.long, device=self.device).unsqueeze(0)
 
-            gamma = self.config["model"]["pointer_gen"]
-            logits = (1 - gamma) * torch.log(final_dist + 1e-9) + gamma * logits_cbdec
 
-            dist = Categorical(logits.exp())  # Phân phối xác suất
-            sampled_token = dist.sample()
-            log_prob = dist.log_prob(sampled_token)
-
-            sampled_summary.append(sampled_token.item())
-            log_probs.append(log_prob)
-
-            if sampled_token.item() == tokenizer.eos_token_id:
-                break
-
-            decoder_input = sampled_token.unsqueeze(0)
-
-        return greedy_summary, sampled_summary, log_probs
-
-    def compute_reward(self, predicted_text, reference_text):
-        """ Tính reward bằng ROUGE-L """
-        scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
-        scores = scorer.score(reference_text, predicted_text)
-        return scores['rougeL'].fmeasure
-
-    def rl_loss(self, log_probs, r_greedy, r_sampled):
-        """ Tính loss RL """
-        reward_diff = r_greedy - r_sampled
-        loss = -sum(log_prob * reward_diff for log_prob in log_probs)
-        return loss / len(log_probs)
-
-    def train_step(self, optimizer, input_text, reference_text, tokenizer):
-        """ Huấn luyện với RL + XE """
-        optimizer.zero_grad()
-        
-        greedy_summary, sampled_summary, log_probs = self.forward(input_text, tokenizer)
-        
-        greedy_text = tokenizer.decode(greedy_summary, skip_special_tokens=True)
-        sampled_text = tokenizer.decode(sampled_summary, skip_special_tokens=True)
-
-        r_greedy = self.compute_reward(greedy_text, reference_text)
-        r_sampled = self.compute_reward(sampled_text, reference_text)
-
-        loss_rl = self.rl_loss(log_probs, r_greedy, r_sampled)
-        loss_xe = loss_fn(...)  # Cross-Entropy loss (cần triển khai)
-
-        lambda_rl = 0.8  # Hệ số RL
-        loss = lambda_rl * loss_rl + (1 - lambda_rl) * loss_xe
-
-        loss.backward()
-        optimizer.step()
-
-        return loss.item(), r_sampled, r_greedy
