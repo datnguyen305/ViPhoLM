@@ -292,51 +292,51 @@ class closedbook(object):
         return logits_attn, logits_cbdec, loss
     import torch
 
-def predict(self, input_text, tokenizer, max_length=100):
-    """
-    Hàm dự đoán đầu ra từ mô hình closedbook.
-    
-    Args:
-        input_text (str): Chuỗi đầu vào.
-        tokenizer: Bộ tokenizer để biến đổi input_text thành tensor.
-        max_length (int): Độ dài tối đa của đầu ra.
-    
-    Returns:
-        str: Câu tóm tắt được sinh ra.
-    """
-    # Chuyển input_text thành tensor
-    input_ids = tokenizer.encode(input_text, return_tensors="pt").to(self.device)
+    def predict(self, input_text, tokenizer, max_length=100):
+        """
+        Hàm dự đoán đầu ra từ mô hình closedbook.
+        
+        Args:
+            input_text (str): Chuỗi đầu vào.
+            tokenizer: Bộ tokenizer để biến đổi input_text thành tensor.
+            max_length (int): Độ dài tối đa của đầu ra.
+        
+        Returns:
+            str: Câu tóm tắt được sinh ra.
+        """
+        # Chuyển input_text thành tensor
+        input_ids = tokenizer.encode(input_text, return_tensors="pt").to(self.device)
 
-    # Encode input
-    encoder_outputs, encoder_hidden = self.encoder(input_ids)
+        # Encode input
+        encoder_outputs, encoder_hidden = self.encoder(input_ids)
 
-    # Tạo token bắt đầu
-    decoder_input = torch.tensor([[tokenizer.bos_token_id]], dtype=torch.long).to(self.device)
+        # Tạo token bắt đầu
+        decoder_input = torch.tensor([[tokenizer.bos_token_id]], dtype=torch.long).to(self.device)
 
-    decoder_hidden = encoder_hidden
-    output_tokens = []
+        decoder_hidden = encoder_hidden
+        output_tokens = []
 
-    for _ in range(max_length):
-        # Dự đoán với cả hai decoder
-        final_dist, _, _, _, _, _, _ = self.pointer_decoder(
-            decoder_input, decoder_hidden, encoder_outputs, None, None, None, None, _
-        )
-        logits_cbdec, _, _ = self.closed_book_decoder(decoder_input, decoder_hidden)
+        for _ in range(max_length):
+            # Dự đoán với cả hai decoder
+            final_dist, _, _, _, _, _, _ = self.pointer_decoder(
+                decoder_input, decoder_hidden, encoder_outputs, None, None, None, None, _
+            )
+            logits_cbdec, _, _ = self.closed_book_decoder(decoder_input, decoder_hidden)
 
-        # Kết hợp hai dự đoán
-        gamma = self.config["model"]["pointer_gen"]
-        logits = (1 - gamma) * torch.log(final_dist + 1e-9) + gamma * logits_cbdec
+            # Kết hợp hai dự đoán
+            gamma = self.config["model"]["pointer_gen"]
+            logits = (1 - gamma) * torch.log(final_dist + 1e-9) + gamma * logits_cbdec
 
-        # Lấy token có xác suất cao nhất
-        next_token = torch.argmax(logits, dim=-1).item()
+            # Lấy token có xác suất cao nhất
+            next_token = torch.argmax(logits, dim=-1).item()
 
-        # Nếu gặp token <eos>, dừng lại
-        if next_token == tokenizer.eos_token_id:
-            break
+            # Nếu gặp token <eos>, dừng lại
+            if next_token == tokenizer.eos_token_id:
+                break
 
-        output_tokens.append(next_token)
-        decoder_input = torch.tensor([[next_token]], dtype=torch.long).to(self.device)
+            output_tokens.append(next_token)
+            decoder_input = torch.tensor([[next_token]], dtype=torch.long).to(self.device)
 
-    # Chuyển tokens thành text
-    output_text = tokenizer.decode(output_tokens, skip_special_tokens=True)
-    return output_text
+        # Chuyển tokens thành text
+        output_text = tokenizer.decode(output_tokens, skip_special_tokens=True)
+        return output_text
