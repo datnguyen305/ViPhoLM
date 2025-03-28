@@ -4,3 +4,6 @@ __pycache__
 checkpoints
 *.pth
 *.bin
+*.csv
+*.json
+*.examine
