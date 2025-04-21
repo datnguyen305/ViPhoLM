@@ -1,208 +1,199 @@
 import torch
+from torch.nn import functional as F
 import torch.nn as nn
-import torch.nn.functional as F
 import random
 from vocabs.vocab import Vocab
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from builders.model_builder import META_ARCHITECTURE
 
-def to_cuda(tensor):
-    if torch.cuda.is_available():
-        return tensor.cuda()
-    return tensor
+class Encoder(nn.Module):
+    def __init__(self, config, vocab: Vocab):
+        super().__init__()
+
+        self.vocab = vocab
+        self.embedding = nn.Embedding(vocab.vocab_size, config.hidden_size, padding_idx = vocab.pad_idx)
+        self.pos_embedding = nn.Embedding(len(vocab.pos_itos),  config.hidden_size//4) # pos_emb_dim = 64
+        self.ner_embedding = nn.Embedding(len(vocab.ner_itos),  config.hidden_size//4)  # ner_emb_dim = 64
+        self.tfidf_embedding = nn.Linear(vocab.vocab_size, config.tfidf_emb_dim)
+        self.rnn = nn.GRU(
+            config.enc_emb_dim + config.pos_emb_dim + config.ner_emb_dim + config.tfidf_emb_dim, 
+            config.enc_hid_dim,
+            bidirectional=True,
+            batch_first=True
+        )
+        self.fc = nn.Linear((config.emb_dim + config.pos_emb_dim + config.ner_emb_dim + config.tfidf_emb_dim)*2, config.dec_hid_dim)
+        self.dropout = nn.Dropout(config.Dropout)
+
+    def forward(self, input):
+        # input: [batch_size, src_len]
+        input_len = input.shape[1]
+        pos_tags, ner_tags = self.vocab.encode_pos_ner(input, self.vocab.pos_tags, self.vocab.ner_tags)
+        # pos_tags: [batch_size, src_len]
+        # ner_tags: [batch_size, src_len]
+        tfidf = self.vocab.get_tfidf_vector(input)
+        # tfidf: [batch_size, src_len]
+
+        word_embedded = self.dropout(self.embedding(input))
+        # word_embedded: [batch_size, src_len, emb_dim]
+        pos_embedded = self.dropout(self.pos_embedding(pos_tags))
+        # pos_embedded: [batch_size, src_len, hidden_size//4]
+        ner_embedded = self.dropout(self.ner_embedding(ner_tags))
+        # ner_embedded: [batch_size, src_len, hidden_size//4]
+        tfidf_embedded = self.dropout(self.tfidf_embedding(self.vocab.tfidf_values))
+        # tfidf_embedded: [batch_size, tfidf_emb_dim]
+        tfidf_embedded = tfidf_embedded.unsqueeze(1).repeat(1, input_len, 1)
+        # tfidf_embedded: [batch_size, src_len, tfidf_emb_dim]
+
+        concatenated_input = torch.tanh(torch.cat((word_embedded, pos_embedded, ner_embedded, tfidf_embedded), dim=-1))
+        # concatenated_input: [batch_size, src_len, emb_dim + pos_emb_dim + ner_emb_dim + tfidf_emb_dim]
+        embedded = self.dropout(concatenated_input)
+        # embedded: [batch_size, src_len, emb_dim + pos_emb_dim + ner_emb_dim + tfidf_emb_dim]
+        packed_embedded = pack_padded_sequence(embedded, input_len.cpu() , batch_first=True, enforce_sorted=False)
+        packed_outputs, hidden = self.rnn(packed_embedded)
+        # hidden: [num_layers * num_directions, batch_size, emb_dim + pos_emb_dim + ner_emb_dim + tfidf_emb_dim]
+        outputs,_ = pad_packed_sequence(packed_outputs, batch_first=True)
+        # outputs: [batch_size, src_len, num_directions * emb_dim + pos_emb_dim + ner_emb_dim + tfidf_emb_dim]
+
+        hidden = torch.tanh(self.fc(torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim=-1)))
+        # hidden: [batch_size, dec_hid_dim aka hidden_size*2]
+        return outputs, hidden
+    
+class Attention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.attn = nn.Linear((config.enc_hid_dim * 2) + config.dec_hid_dim, config.dec_hid_dim)
+        self.v = nn.Linear(config.dec_hid_dim, 1, bias=False)
+        self.coverage = nn.Linear(1, config.dec_hid_dim)
+
+    def forward(self, hidden, encoder_outputs, coverage_vector):
+        # hidden: [batch_size, dec_hid_dim] 
+        # encoder_outputs: [batch_size, src_len, enc_hid_dim * 2]
+
+        src_len = encoder_outputs.shape[1]
+        coverage_vector = self.coverage(coverage_vector.unsqueeze(-1))
+        # coverage_vector: [batch_size, src_len, dec_hid_dim]
+        hidden = hidden.unsqueeze(1).repeat(1, src_len, 1)
+        # hidden: [batch_size, src_len, dec_hid_dim]
+        energy = torch.tanh(self.attn(torch.cat((hidden, encoder_outputs, coverage_vector.unsqueezed(2)), dim=2)))
+        # energy: [batch_size, src_len, dec_hid_dim]  
+        attention = self.v(energy).squeeze(2)
+        # attention: [batch_size, src_len]
+        attention = F.softmax(attention, dim=1)
+        new_coverage = coverage_vector + attention
+        return attention, new_coverage
+    
+class Decoder(nn.Module):
+    def __init__(self, config, vocab: Vocab):
+        super().__init__()
+        
+        self.output_dim = vocab.vocab_size
+        self.attention = Attention()
+        self.device = config.device
+        self.embedding = nn.Embedding(self.output_dim, config.dec_emb_dim, padding_idx=vocab.pad_idx)
+        self.rnn = nn.GRU((config.enc_hid_dim * 2) + config.dec_emb_dim, config.dec_hid_dim, batch_first=True)
+        self.fc_out = nn.Linear((config.enc_hid_dim * 2) + config.dec_hid_dim + config.dec_emb_dim, self.output_dim)
+        self.p_gen = nn.Linear((config.enc_hid_dim * 2) + config.dec_hid_dim + config.dec_emb_dim, 1)
+        self.dropout = nn.Dropout(config.dropout)
+    
+    def forward(self, input, hidden , encoder_outputs, src_words, coverage_vector):
+        # input: [batch_size]: y_i-1
+        # hidden: [batch_size, dec_hid_dim]: s_i-1
+        # encoder_outputs: [batch_size, src_len, enc_hid_dim * 2]: h_j
+
+        input = input.unsqueeze(1)
+        # input: [batch_size, 1]
+        embedded = self.dropout(self.embedding(input))
+        # embedded: [batch_size, 1, dec_emb_dim]
+        a, new_coverage = self.attention(hidden, encoder_outputs, coverage_vector)
+        # a [batch_size, src_len]
+        a = a.unsqueeze(1)
+        # a [batch_size, 1, src_len]
+        # encoder_outputs: [batch_size, src_len, enc_hid_dim * 2]
+        weight = a.bmm(encoder_outputs)
+        # weight: [batch_size, 1, enc_hid_dim * 2]
+        rnn_input = torch.cat((embedded,weight), dim=2)
+        # rnn_input: [batch_size, 1, dec_emb_dim + enc_hid_dim * 2]
+        # hidden: [batch_size, dec_hid_dim]
+        output, hidden = self.rnn(rnn_input, hidden.unsqueeze(0))
+        # output: [batch_size, 1, dec_hid_dim]
+        # hidden: [1, batch_size, dec_hid_dim]
+        # weights: [batch_size, 1, enc_hid_dim * 2]
+        prediction = self.fc_out(torch.cat((output, weight, embedded), dim=2))
+        # prediction: [batch_size, 1, output_dim]
+
+        p_gen_input = torch.cat((output.squeeze(1), hidden.squeeze(0), embedded.squeeze(1)), dim=-1)
+        # p_gen_input: [batch_size, dec_hid_dim + dec_hid_dim + dec_emb_dim]
+        p_gen = torch.sigmoid(self.p_gen(p_gen_input))
+        # p_gen: [batch_size, 1]
+        vocab_dist = F.softmax(prediction.squeeze(1), dim=-1) * p_gen
+        copy_dist = a * (1 - p_gen)
+        # copy_dist: [batch_size, src_len]
+        final_dist = torch.zeros(input.shape[0], self.vocab.vocab_size).to(self.device)
+        # final_dist: [batch_size, vocab_size]
+        final_dist.scatter_add_(1, src_words, copy_dist)  # Copy từ input
+        final_dist[:, :vocab_dist.size(1)] += vocab_dist
+
+        return final_dist, hidden.squeeze(0), a.squeeze(1), new_coverage
 
 @META_ARCHITECTURE.register()
 class abstractiveRNN(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super().__init__()
-        rnn_type = config.rnn_type
-        embz_size = config.embz_size
-        hidden_size = config.hidden_size
-        batch_size = config.batch_size
-        input_size=len(vocab)
-        output_size=len(vocab)
-        max_tgt_len = config.max_tgt_len
-        attention_type = config.attention_type
-        tied_weight_type = config.tied_weight_type
-        pre_trained_vector_type = config.pre_trained_vector_type
-        pre_trained_vector = None
-        padding_idx = config.padding_idx
-        num_layers = config.num_layers
-        encoder_drop = config.encoder_drop
-        decoder_drop = config.decoder_drop
-        bidirectional = config.bidirectional
-        bias = config.bias
-        teacher_forcing = config.teacher_forcing
+        
+        self.encoder = Encoder(config, vocab)
+        self.decoder = Decoder(config, vocab)
+        self.vocab = vocab
+        self.MAX_LENGTH = vocab.max_sentence_length + 2 # + 2 for bos and eos tokens
 
-        rnn_type, attention_type, tied_weight_type = rnn_type.upper(), attention_type.title(), tied_weight_type.lower()
+        self.device = config.device
+        self.loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.pad_idx)
         
-        if rnn_type in ['LSTM', 'GRU']: self.rnn_type = rnn_type
-        else: raise ValueError("""An invalid option for '--rnn_type' was supplied,
-                                    options are ['LSTM', 'GRU']""")
-            
-        if attention_type in ['Luong', 'Bahdanau']: self.attention_type = attention_type
-        else: raise ValueError("""An invalid option for '--attention_type' was supplied,
-                                    options are ['Luong', 'Bahdanau']""")
-            
-        if tied_weight_type in ['three_way', 'two_way']: self.tied_weight_type = tied_weight_type
-        else: raise ValueError("""An invalid option for '--tied_weight_type' was supplied,
-                                    options are ['three_way', 'two_way']""")
+    def forward(self, src, trg): # teacher forcing = 0.5
+        # src = [batch size, src len]
+        # trg = [batch size, trg len]
+        teacher_forcing_ratio = 0.5
+        batch_size = src.shape[0]
+        trg_len = trg.shape[1]
+        trg_vocab_size = self.vocab.vocab_size
+        
+        coverage_vector = torch.zeros(batch_size, src.shape[1]).to(self.device)
+        total_loss = 0
+        outputs = torch.zeros(batch_size, trg_len, trg_vocab_size).to(self.device)
+        
+        encoder_outputs, hidden = self.encoder(src)
+        
+        input = trg[:, 0]  # First input is <sos> token
+        for t in range(self.MAX_LENGTH):
+            output, hidden, attn, coverage_vector = self.decoder(input, hidden, encoder_outputs, src, coverage_vector)
+            outputs[:, t] = output
+            cov_loss = torch.sum(torch.min(attn, coverage_vector), dim=1)  # [batch_size]
+            loss = self.loss_fn(output, trg[:, t]) + 0.1 * cov_loss.mean()  # Lambda = 0.1
+            total_loss += loss
+            teacher_force = random.random() < teacher_forcing_ratio
+            top1 = output.argmax(1)
+            input = trg[:, t] if teacher_force else top1
+                    
+        return outputs, total_loss
     
-        #initialize model parameters            
-        self.output_size, self.embz_size, self.hidden_size = output_size, embz_size, hidden_size//2
-        self.num_layers, self.input_size, self.max_tgt_len, self.pre_trained_vector = num_layers, input_size, max_tgt_len, pre_trained_vector
-        self.bidirectional,self.teacher_forcing, self.pre_trained_vector_type = bidirectional, teacher_forcing, pre_trained_vector_type
-        self.encoder_drop, self.decoder_drop, self.padding_idx = encoder_drop, decoder_drop, padding_idx
-        
-        if self.teacher_forcing: self.force_prob = 0.5
-        
-        #set bidirectional
-        if self.bidirectional: self.num_directions = 2
-        else: self.num_directions = 1
+    def predict(self, src, max_len=50):
+        """Generate translation without teacher forcing"""
+        with torch.no_grad():
+            batch_size = src.shape[0]
+            src_len = src.shape[1]
             
-        #encoder
-        self.encoder_dropout = nn.Dropout(self.encoder_drop[0])
-        self.encoder_embedding_layer = nn.Embedding(self.input_size, self.embz_size, padding_idx=self.padding_idx)
-        if self.pre_trained_vector: self.encoder_embedding_layer.weight.data.copy_(self.pre_trained_vector.weight.data)
+            encoder_outputs, hidden = self.encoder(src, src_len)
             
-        self.encoder_rnn = getattr(nn, self.rnn_type)(
-                           input_size=self.embz_size,
-                           hidden_size=self.hidden_size,
-                           num_layers=self.num_layers,
-                           dropout=self.encoder_drop[1], 
-                           bidirectional=self.bidirectional)
-        self.encoder_vector_layer = nn.Linear(self.hidden_size*self.num_directions,self.embz_size, bias=bias)
-        
-        #decoder
-        self.decoder_dropout = nn.Dropout(self.decoder_drop[0])
-        self.decoder_embedding_layer = nn.Embedding(self.input_size, self.embz_size, padding_idx=self.padding_idx)
-        self.decoder_rnn = getattr(nn, self.rnn_type)(
-                           input_size=self.embz_size,
-                           hidden_size=self.hidden_size*self.num_directions,
-                           num_layers=self.num_layers,
-                           dropout=self.decoder_drop[1]) 
-        self.decoder_output_layer = nn.Linear(self.hidden_size*self.num_directions, self.embz_size, bias=bias)
-        self.output_layer = nn.Linear(self.embz_size, self.output_size, bias=bias)
-        
-        #set tied weights: three way tied weights vs two way tied weights
-        if self.tied_weight_type == 'three_way':
-            self.decoder_embedding_layer.weight  = self.encoder_embedding_layer.weight
-            self.output_layer.weight = self.decoder_embedding_layer.weight  
-        else:
-            if self.pre_trained_vector: self.decoder_embedding_layer.weight.data.copy_(self.pre_trained_vector.weight.data)
-            self.output_layer.weight = self.decoder_embedding_layer.weight  
+            outputs = torch.zeros(batch_size, max_len, self.vocab.vocab_size).to(self.device)
+            input = torch.tensor([self.vocab.bos_idx] * batch_size).to(self.device)
             
-        #set attention
-        self.encoder_output_layer = nn.Linear(self.hidden_size*self.num_directions, self.embz_size, bias=bias)
-        self.att_vector_layer = nn.Linear(self.embz_size+self.embz_size, self.embz_size,bias=bias)
-        if self.attention_type == 'Bahdanau':
-            self.decoder_hidden_layer = nn.Linear(self.hidden_size*self.num_directions, self.embz_size, bias=bias)
-            self.att_score = nn.Linear(self.embz_size,1,bias=bias)
-    
-    def init_hidden(self, batch_size):
-        if self.rnn_type == 'LSTM':
-            return (to_cuda(torch.zeros(self.num_layers*self.num_directions, batch_size, self.hidden_size)),
-                    to_cuda(torch.zeros(self.num_layers*self.num_directions, batch_size, self.hidden_size)))
-        else:
-            return to_cuda(torch.zeros(self.num_layers*self.num_directions, batch_size, self.hidden_size))
-
-    def _cat_directions(self, hidden):
-        def _cat(h):
-            return torch.cat([h[0:h.size(0):2], h[1:h.size(0):2]], 2)
-            
-        if isinstance(hidden, tuple):
-            # LSTM hidden contains a tuple (hidden state, cell state)
-            hidden = tuple([_cat(h) for h in hidden])
-        else:
-            # GRU hidden
-            hidden = _cat(hidden)
-        return hidden    
-    
-    def bahdanau_attention(self, encoder_output, decoder_hidden, decoder_input):
-        encoder_output = self.encoder_output_layer(encoder_output) 
-        encoder_output = encoder_output.transpose(0,1)
-        decoder_hidden = decoder_hidden.transpose(0,1)
-        att_score = F.tanh(encoder_output + decoder_hidden)
-        att_score = self.att_score(att_score)
-        att_weight = F.softmax(att_score, dim=1)
-        context_vector = torch.bmm(att_weight.transpose(-1, 1), encoder_output).squeeze(1)
-        att_vector = torch.cat((context_vector, decoder_input), dim=1)
-        att_vector = self.att_vector_layer(att_vector)
-        att_vector = F.tanh(att_vector)
-        return att_weight.squeeze(-1), att_vector
-    
-    def luong_attention(self, encoder_output, decoder_output):
-        encoder_output = self.encoder_output_layer(encoder_output) 
-        encoder_output = encoder_output.transpose(0,1)
-        decoder_output = decoder_output.transpose(0,1)
-        att_score = torch.bmm(encoder_output, decoder_output.transpose(-1,1))
-        att_weight = F.softmax(att_score, dim=1)
-        context_vector = torch.bmm(att_weight.transpose(-1, 1), encoder_output).squeeze(1)
-        att_vector = torch.cat((context_vector, decoder_output.squeeze(1)), dim=1)
-        att_vector = self.att_vector_layer(att_vector)
-        att_vector = F.tanh(att_vector)
-        return att_weight.squeeze(-1), att_vector
-        
-    def decoder_forward(self, batch_size, encoder_output, decoder_hidden, y=None):
-        decoder_input = to_cuda(torch.zeros(batch_size).long())
-        output_seq_stack, att_stack = [], []
-        
-        for i in range(self.max_tgt_len):
-            decoder_input = self.decoder_dropout(self.decoder_embedding_layer(decoder_input))
-            if self.attention_type == 'Bahdanau':
-                if isinstance(decoder_hidden, tuple):
-                    prev_hidden = self.decoder_hidden_layer(decoder_hidden[0][-1]).unsqueeze(0)
-                else:
-                    prev_hidden = self.decoder_hidden_layer(decoder_hidden[-1]).unsqueeze(0) 
-                att, decoder_input = self.bahdanau_attention(encoder_output, prev_hidden, decoder_input)
-                decoder_output, decoder_hidden = self.decoder_rnn(decoder_input.unsqueeze(0), decoder_hidden)
-                decoder_output = self.decoder_output_layer(decoder_output.squeeze(0)) 
-            else:
-                decoder_output, decoder_hidden = self.decoder_rnn(decoder_input.unsqueeze(0), decoder_hidden)
-                decoder_output = self.decoder_output_layer(decoder_output) 
-                att, decoder_output = self.luong_attention(encoder_output, decoder_output)
-            att_stack.append(att)
-            output = self.output_layer(decoder_output)
-            output_seq_stack.append(output)
-            decoder_input = to_cuda(output.data.max(1)[1])
-            if (decoder_input==1).all(): break 
-            if self.teacher_forcing:    
-                samp_prob = round(random.random(),1)
-                if (y is not None) and (samp_prob < self.force_prob):
-                    if i >= len(y): break
-                    decoder_input = y[i] 
+            for t in range(self.MAX_LENGTH):
+                output, hidden, _ = self.decoder(input, hidden, encoder_outputs)
+                outputs[:, t] = output
+                input = output.argmax(1)
                 
-        return torch.stack(output_seq_stack), torch.stack(att_stack)
-                
-    def forward(self, seq, y=None):
-        batch_size = seq[0].size(0)
-        encoder_hidden = self.init_hidden(batch_size)
-        encoder_input = self.encoder_dropout(self.encoder_embedding_layer(seq))
-        encoder_output, encoder_hidden = self.encoder_rnn(encoder_input, encoder_hidden) 
-        if self.bidirectional:
-            encoder_hidden = self._cat_directions(encoder_hidden)
-        output = self.decoder_forward(batch_size, encoder_output, encoder_hidden, y=y)
-        if isinstance(encoder_hidden, tuple):
-            encoder_vector = self.encoder_vector_layer(encoder_hidden[0][-1])
-        else:
-            encoder_vector = self.encoder_vector_layer(encoder_hidden[-1])
-        output = output + (encoder_vector,)  
-        return output
-    
-    def predict(self, seq):
-        """Sinh ra câu tóm tắt từ mô hình đã train."""
-        self.eval()  # Chuyển sang chế độ đánh giá (tắt dropout)
-        with torch.no_grad():  
-            batch_size = seq[0].size(0)
-            encoder_hidden = self.init_hidden(batch_size)
-            encoder_input = self.encoder_embedding_layer(seq)
-            encoder_output, encoder_hidden = self.encoder_rnn(encoder_input, encoder_hidden)
-
-            if self.bidirectional:
-                encoder_hidden = self._cat_directions(encoder_hidden)
-
-            # Dự đoán không có nhãn y
-            output, attn_weights, encoder_vector = self.decoder_forward(batch_size, encoder_output, encoder_hidden)
-
-            # Chuyển output thành danh sách token
-            predicted_tokens = output.argmax(-1).tolist()
-        return predicted_tokens
+                # Stop if all sequences generated <eos>
+                if (input == self.vocab.eos_idx).all():
+                    break
+            
+            return outputs.argmax(2)  # [batch_size, max_len]
