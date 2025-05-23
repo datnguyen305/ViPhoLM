@@ -139,7 +139,7 @@ class Decoder(nn.Module):
 @META_ARCHITECTURE.register()
 class abstractiveRNN_model(nn.Module):
     def __init__(self, config, vocab: Vocab):
-        super().__init__()
+        super(abstractiveRNN_model, self).__init__()
         
         self.encoder = Encoder(config, vocab)
         self.decoder = Decoder(config, vocab)
