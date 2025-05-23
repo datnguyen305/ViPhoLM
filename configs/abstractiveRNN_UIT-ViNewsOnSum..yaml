@@ -1,57 +1,55 @@
-
 vocab:
-  type: Vocab
+  type: VocabWithFeatures
   path:
-    train: datasets/UIT-ViNewsOnSum.-dataset/train.json
-    dev: datasets/UIT-ViNewsOnSum.-dataset/dev.json
-    test: datasets/UIT-ViNewsOnSum.-dataset/test.json
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
   unk_token: <unk>
   pad_token: <pad>
-
+  spacy_model: vi_core_news_lg
+  pos_tags: []
+  ner_tags: []
+  tfidf:
+    smooth_idf: true
+    sublinear_tf: true
 dataset:
-  train: 
+  train:
     type: TextSumDataset
-    path: datasets/UIT-ViNewsOnSum.-dataset/train.json
+    path: datasets/Wikilingual-dataset/train.json
   dev:
     type: TextSumDataset
-    path: datasets/UIT-ViNewsOnSum.-dataset/dev.json
-  test: 
+    path: datasets/Wikilingual-dataset/dev.json
+  test:
     type: TextSumDataset
-    path: datasets/UIT-ViNewsOnSum.-dataset/test.json
+    path: datasets/Wikilingual-dataset/test.json
   batch_size: 32
   num_workers: 16
-
-model: 
-  name: abstractiveRNN_UIT-ViNewsOnSum.
+model:
+  name: abstractiveRNN_Wikilingual
   architecture: abstractiveRNN
-  rnn_type: 'gru'
-  embz_size: 256
   hidden_size: 512
-  batch_size: 32
-  max_tgt_len: 25
-  attention_type: 'luong'
-  tied_weight_type: 'three_way'
-  pre_trained_vector_type: None
-  padding_idx: 0
-  num_layers: 1
-  encoder_drop: [0.2, 0.3]
-  decoder_drop: [0.2, 0.3]
-  bidirectional: true
-  bias: false
-  teacher_forcing: true
-  num_layers: 1
   device: cuda
-  lr: 1e-3
-  epochs: 5
-
+  dropout: 0.5
+  teacher_forcing_ratio: 0.5
+  coverage_loss_weight: 0.1
+  encoder:
+    word_emb_dim: 256
+    pos_emb_dim: 64
+    ner_emb_dim: 64
+    tfidf_emb_dim: 32
+    enc_hid_dim: 512
+    bidirectional: true
+  decoder:
+    dec_emb_dim: 256
+    dec_hid_dim: 512
+    attention_dim: 256
 training:
-  checkpoint_path: "checkpoints"
+  checkpoint_path: checkpoints
   learning_rate: 0.5
   warmup: 1000
   patience: 5
   score: rouge-L
-
 task: TextSumTask
