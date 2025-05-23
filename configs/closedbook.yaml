@@ -1,0 +1,71 @@
+vocab:
+  type: Vocab
+  path:
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train:
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/dev.json
+  test:
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 8
+  num_workers: 4
+
+model:
+  emb_dim: 128
+  rand_unif_init_mag: 0.02
+  trunc_norm_init_std: 0.0001
+  encoder:
+    layer_dim: 1
+    input_dim: 256
+    hidden_size: 256
+    bidirectional: True
+    dropout: 0.1
+  decoder:
+    layer_dim: 1
+    input_dim: 256
+    hidden_size: 256
+    bidirectional: False
+    dropout: 0.1
+  name: closedbook_VietNews
+  architecture: Closedbook
+  d_model: 256
+  checkpoint: "checkpoints/closedbook_model.pt"
+  hidden_dim: 256
+  batch_size: 8
+  max_enc_steps: 400
+  max_dec_steps: 100
+  beam_size: 5
+  min_dec_steps: 35
+  dropout: 0.0
+  lr: 0.15
+  adagrad_init_acc: 0.1
+  max_grad_norm: 2.0
+  max_iterations: 500000
+  eps: 1e-12
+  lr_coverage: 0.15
+  pointer_gen: true
+  is_coverage: false
+  use_gpu: true
+  cov_loss_wt: 1.0
+  closed_book_mode: true # Đã thêm dòng này để kích hoạt chế độ closed-book
+  device: cuda
+
+training:
+  checkpoint_path: "checkpoints"
+  lr: 0.15
+  lr_coverage: 0.15
+
+task: TextSumTask
