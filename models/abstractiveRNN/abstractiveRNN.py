@@ -137,7 +137,7 @@ class Decoder(nn.Module):
         return final_dist, hidden.squeeze(0), a.squeeze(1), new_coverage
 
 @META_ARCHITECTURE.register()
-class abstractiveRNN(nn.Module):
+class abstractiveRNN_model(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super().__init__()
         
