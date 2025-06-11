@@ -8,6 +8,7 @@ from builders.dataset_builder import build_dataset
 from tasks.base_task import BaseTask
 from data_utils import collate_fn
 import evaluation
+from models.fast.copy_sum import CopySumm
 
 @META_TASK.register()
 class TextSumTask(BaseTask):
@@ -61,10 +62,15 @@ class TextSumTask(BaseTask):
                 items = items.to(self.device)
                 # forward pass
                 input_ids = items.input_ids
-        
                 labels = items.shifted_right_label
                 
-                _, loss = self.model(input_ids, labels)
+                # Check if model is CopySumm
+                if isinstance(self.model, CopySumm):
+                    extend_art = input_ids
+                    extend_vsize = len(self.vocab)
+                    _, loss = self.model(input_ids, labels, extend_art=extend_art, extend_vsize=extend_vsize)
+                else:
+                    _, loss = self.model(input_ids, labels)
                 
                 # backward pass
                 self.optim.zero_grad()
@@ -87,7 +93,13 @@ class TextSumTask(BaseTask):
                 input_ids = items.input_ids
                 label = items.label
                 with torch.no_grad():
-                    prediction = self.model.predict(input_ids)
+                    # Check if model is CopySumm
+                    if isinstance(self.model, CopySumm):
+                        extend_art = input_ids
+                        extend_vsize = len(self.vocab)
+                        prediction = self.model.predict(input_ids, extend_art=extend_art, extend_vsize=extend_vsize)
+                    else:
+                        prediction = self.model.predict(input_ids)
 
                     prediction = self.vocab.decode_sentence(prediction)
                     label = self.vocab.decode_sentence(label)

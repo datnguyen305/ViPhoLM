@@ -60,7 +60,7 @@ model:
   is_coverage: false
   use_gpu: true
   cov_loss_wt: 1.0
-  closed_book_mode: true # Đã thêm dòng này để kích hoạt chế độ closed-book
+  closed_book_mode: true 
   device: cuda
 
 training:

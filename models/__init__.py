@@ -6,3 +6,4 @@ from .abstractiveRNN.abstractiveRNN import abstractiveRNN_model
 from .pointer_generator.model import PointerGeneratorModel
 from .transformer.model.transformer import TransformerModel
 from .closedbook.closedbook import Closedbook
+from .fast.copy_sum import CopySumm
