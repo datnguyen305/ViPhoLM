@@ -1,3 +1,4 @@
+# transformer.py
 import torch
 from torch import nn
 
@@ -24,6 +25,10 @@ class TransformerModel(nn.Module):
         self.d_model = config.d_model
         self.device = config.device 
         self.config = config
+        self.vocab = vocab
+
+        self.loss = nn.CrossEntropyLoss(ignore_index=self.trg_pad_idx)
+
 
     def forward(self, src, trg):
         config = self.config
@@ -40,7 +45,15 @@ class TransformerModel(nn.Module):
         trg_mask = self.make_trg_mask(trg)
         enc_src = self.encoder(src, src_mask)
         output = self.decoder(trg, enc_src, trg_mask, src_mask)
-        return output
+
+         # Tính loss
+        output_flat = output.contiguous().view(-1, output.size(-1))  # [B*T, Vocab]
+        trg_flat = trg.contiguous().view(-1)                         # [B*T]
+
+        loss = self.loss(output_flat, trg_flat)
+
+
+        return output, loss
 
     def make_src_mask(self, src):
         max_seq_len = src.shape[1]  # Lấy độ dài thực tế
@@ -99,3 +112,4 @@ class TransformerModel(nn.Module):
         outputs = torch.cat(outputs, dim=1)
         
         return outputs
+
