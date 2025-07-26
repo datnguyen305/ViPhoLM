@@ -80,7 +80,7 @@ class BaseTask:
 
         self.logger.info("Loading checkpoint from %s", fname)
 
-        checkpoint = torch.load(fname)
+        checkpoint = torch.load(fname, weights_only=False)
 
         torch.set_rng_state(checkpoint['torch_rng_state'])
         torch.cuda.set_rng_state(checkpoint['cuda_rng_state'])

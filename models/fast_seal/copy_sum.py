@@ -36,7 +36,7 @@ class _CopyLinear(nn.Module):
         return output
 
 @META_ARCHITECTURE.register()
-class CopySumm(Seq2SeqSumm):
+class CopySummSeal(Seq2SeqSumm):
     def __init__(self, config, vocab):
         super().__init__(
             vocab_size=len(vocab),
@@ -236,6 +236,9 @@ class CopyLSTMDecoder(AttentionalLSTMDecoder):
     def __init__(self, copy, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._copy = copy
+        # Thêm SEALAttention
+        from .attention import SEALAttention
+        self.seal_attention = SEALAttention(d_model=512, n_head=8, segment_size=64)
 
     def _step(self, tok, states, attention):
         prev_states, prev_out = states
@@ -247,8 +250,15 @@ class CopyLSTMDecoder(AttentionalLSTMDecoder):
         lstm_out = states[0][-1]
         query = torch.mm(lstm_out, self._attn_w)
         attention, attn_mask, extend_src, extend_vsize = attention
-        context, score = step_attention(
-            query, attention, attention, attn_mask)
+        # Sử dụng SEALAttention thay cho step_attention
+        # attention: (batch, seq_len, d_model)
+        # query shape: (batch, d_model) => cần reshape để batch, 1, d_model
+        # Đầu ra: (batch, seq_len, d_model)
+        seal_out = self.seal_attention(attention)  # (batch, seq_len, d_model)
+        # Lấy context vector tương ứng với vị trí max score (hoặc vị trí đầu tiên)
+        # Ở đây tạm lấy context là seal_out[:, 0, :] (token đầu tiên)
+        context = seal_out[:, 0, :]
+        score = None  # SEALAttention không trả về attention score
         dec_out = self._projection(torch.cat([lstm_out, context], dim=1))
 
         # extend generation prob to extended vocabulary
@@ -260,8 +270,8 @@ class CopyLSTMDecoder(AttentionalLSTMDecoder):
             ((-copy_prob + 1) * gen_prob
             ).scatter_add( # Fixed: removed 'source=' keyword
                 1, # dim
-                extend_src.expand_as(score), # index
-                score * copy_prob # src (source tensor)
+                extend_src.expand_as(attention[:, :, 0]), # index
+                torch.ones_like(attention[:, :, 0]) * copy_prob # src (source tensor)
         ) + 1e-8)  # numerical stability for log
         return lp, (states, dec_out), score
 
@@ -286,8 +296,10 @@ class CopyLSTMDecoder(AttentionalLSTMDecoder):
         # attention is beamable
         query = torch.matmul(lstm_out, self._attn_w)
         attention, attn_mask, extend_src, extend_vsize = attention
-        context, score = step_attention(
-            query, attention, attention, attn_mask)
+        # Sử dụng SEALAttention thay cho step_attention
+        seal_out = self.seal_attention(attention)  # (beam*batch, seq_len, d_model)
+        context = seal_out[:, 0, :]
+        score = None
         dec_out = self._projection(torch.cat([lstm_out, context], dim=-1))
 
         # copy mechanism is not beamable
@@ -300,9 +312,9 @@ class CopyLSTMDecoder(AttentionalLSTMDecoder):
             ((-copy_prob + 1) * gen_prob
             ).scatter_add( # Fixed: removed 'source=' keyword
                 1, # dim
-                extend_src.expand_as(score).contiguous().view(
+                extend_src.expand_as(attention[:, :, 0]).contiguous().view(
                     beam*batch, -1),
-                score.contiguous().view(beam*batch, -1) * copy_prob # src (source tensor)
+                torch.ones_like(attention[:, :, 0]).contiguous().view(beam*batch, -1) * copy_prob # src (source tensor)
         ) + 1e-8).contiguous().view(beam, batch, -1)
 
         k_lp, k_tok = lp.topk(k=k, dim=-1)

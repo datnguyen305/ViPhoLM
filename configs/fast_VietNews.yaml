@@ -64,7 +64,7 @@ dataset:
   num_workers: 4
 
 model:
-  name: fast_abs
+  name: fast_abs_VietNews
   architecture: CopySumm
   emb_dim: 128
   dropout: 0.2

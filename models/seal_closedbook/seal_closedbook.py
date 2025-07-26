@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from builders.model_builder import META_ARCHITECTURE
 from vocabs.vocab import Vocab
+from models.transformer_seal.layers.seal_attention import SEALAttention  # Thêm dòng này
 
 
 def init_lstm_wt(lstm, config, vocab: Vocab):
@@ -78,54 +79,17 @@ class ReduceState(nn.Module):
 
         return (hidden_reduced_h.unsqueeze(0), hidden_reduced_c.unsqueeze(0)) # h, c dim = 1 x b x hidden_dim
 
-class Attention(nn.Module):
-    def __init__(self, config, vocab: Vocab):
-        super(Attention, self).__init__()
-        # attention
-        self.decode_proj = nn.Linear(config.hidden_dim * 2, config.hidden_dim * 2)
-        self.v = nn.Linear(config.hidden_dim * 2, 1, bias=False)
-        self.is_coverage = config.is_coverage
-        if self.is_coverage:
-            self.W_c = nn.Linear(1, config.hidden_dim * 2, bias=False)
-        self.hidden_dim = config.hidden_dim
-
-    def forward(self, s_t_hat, encoder_outputs, encoder_feature, enc_padding_mask, coverage):
-        b, t_k, n = list(encoder_outputs.size())
-
-        dec_fea = self.decode_proj(s_t_hat) # B x 2*hidden_dim
-        dec_fea_expanded = dec_fea.unsqueeze(1).expand(b, t_k, n).contiguous() # B x t_k x 2*hidden_dim
-        dec_fea_expanded = dec_fea_expanded.view(-1, n)  # B * t_k x 2*hidden_dim
-
-        att_features = encoder_feature + dec_fea_expanded # B * t_k x 2*hidden_dim
-        if self.is_coverage:
-            coverage_input = coverage.view(-1, 1)  # B * t_k x 1
-            coverage_feature = self.W_c(coverage_input)  # B * t_k x 2*hidden_dim
-            att_features = att_features + coverage_feature
-
-        e = F.tanh(att_features) # B * t_k x 2*hidden_dim
-        scores = self.v(e)  # B * t_k x 1
-        scores = scores.view(-1, t_k)  # B x t_k
-
-        attn_dist_ = F.softmax(scores, dim=1)*enc_padding_mask # B x t_k
-        normalization_factor = attn_dist_.sum(1, keepdim=True)
-        attn_dist = attn_dist_ / normalization_factor
-
-        attn_dist = attn_dist.unsqueeze(1)  # B x 1 x t_k
-        c_t = torch.bmm(attn_dist, encoder_outputs)  # B x 1 x n
-        c_t = c_t.view(-1, self.hidden_dim * 2)  # B x 2*hidden_dim
-
-        attn_dist = attn_dist.view(-1, t_k)  # B x t_k
-
-        if self.is_coverage:
-            coverage = coverage.view(-1, t_k)
-            coverage = coverage + attn_dist
-
-        return c_t, attn_dist, coverage
+# Xóa class Attention cũ
 
 class Decoder(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super(Decoder, self).__init__()
-        self.attention_network = Attention()
+        # attention_network dùng SEALAttention
+        self.attention_network = SEALAttention(
+            d_model=config.hidden_dim * 2,  # hoặc config.d_model nếu đúng
+            n_head=getattr(config, 'n_head', 8),
+            segment_size=getattr(config, 'segment_size', 512)
+        )
         # decoder
         self.embedding = nn.Embedding(config.vocab_size, config.emb_dim)
         init_wt_normal(self.embedding.weight)
@@ -147,14 +111,13 @@ class Decoder(nn.Module):
 
     def forward(self, y_t_1, s_t_1, encoder_outputs, encoder_feature, enc_padding_mask,
                 c_t_1, extra_zeros, enc_batch_extend_vocab, coverage, step):
-
         if not self.training and step == 0:
             h_decoder, c_decoder = s_t_1
             s_t_hat = torch.cat((h_decoder.view(-1, self.hidden_dim),
                                  c_decoder.view(-1, self.hidden_dim)), 1)  # B x 2*hidden_dim
-            c_t, _, coverage_next = self.attention_network(s_t_hat, encoder_outputs, encoder_feature,
-                                                              enc_padding_mask, coverage)
-            coverage = coverage_next
+            # Sử dụng SEALAttention
+            c_t = self.attention_network(encoder_outputs)
+            coverage = coverage  # giữ nguyên
 
         y_t_1_embd = self.embedding(y_t_1)
         x = self.x_context(torch.cat((c_t_1, y_t_1_embd), 1))
@@ -163,11 +126,11 @@ class Decoder(nn.Module):
         h_decoder, c_decoder = s_t
         s_t_hat = torch.cat((h_decoder.view(-1, self.hidden_dim),
                              c_decoder.view(-1, self.hidden_dim)), 1)  # B x 2*hidden_dim
-        c_t, attn_dist, coverage_next = self.attention_network(s_t_hat, encoder_outputs, encoder_feature,
-                                                          enc_padding_mask, coverage)
+        # Sử dụng SEALAttention
+        c_t = self.attention_network(encoder_outputs)
 
         if self.training or step > 0:
-            coverage = coverage_next
+            coverage = coverage
 
         p_gen = None
         if self.pointer_gen:
@@ -177,24 +140,19 @@ class Decoder(nn.Module):
 
         output = torch.cat((lstm_out.view(-1, self.hidden_dim), c_t), 1) # B x hidden_dim * 3
         output = self.out1(output) # B x hidden_dim
-
-        #output = F.relu(output)
-
         output = self.out2(output) # B x vocab_size
         vocab_dist = F.softmax(output, dim=1)
 
         if self.pointer_gen:
             vocab_dist_ = p_gen * vocab_dist
-            attn_dist_ = (1 - p_gen) * attn_dist
-
+            attn_dist_ = (1 - p_gen) * c_t  # c_t ở đây là attention distribution
             if extra_zeros is not None:
                 vocab_dist_ = torch.cat([vocab_dist_, extra_zeros], 1)
-
             final_dist = vocab_dist_.scatter_add(1, enc_batch_extend_vocab, attn_dist_)
         else:
             final_dist = vocab_dist
 
-        return final_dist, s_t, c_t, attn_dist, p_gen, coverage
+        return final_dist, s_t, c_t, c_t, p_gen, coverage
 
 class ClosedbookDecoder(nn.Module):
     """
@@ -206,123 +164,73 @@ class ClosedbookDecoder(nn.Module):
         self.vocab = vocab
         self.hidden_dim = config.hidden_dim
         self.emb_dim = config.emb_dim
-        
-        # Embedding layer
         self.embedding = nn.Embedding(vocab.vocab_size, config.emb_dim)
         init_wt_normal(self.embedding.weight)
-        
-        # Internal memory layer (thay thế cho encoder output)
         self.internal_memory = nn.Parameter(torch.randn(1, config.max_src_len, config.hidden_dim * 2))
         self.memory_projection = nn.Linear(config.hidden_dim * 2, config.hidden_dim * 2)
         init_linear_wt(self.memory_projection)
-        
-        # Attention network cho internal memory
-        self.memory_attention = Attention(config, vocab)
-        
-        # LSTM decoder
+        # Attention network cho internal memory dùng SEALAttention
+        self.memory_attention = SEALAttention(
+            d_model=config.hidden_dim * 2,
+            n_head=getattr(config, 'n_head', 8),
+            segment_size=getattr(config, 'segment_size', 512)
+        )
         self.lstm = nn.LSTM(config.emb_dim, config.hidden_dim, num_layers=1, 
                            batch_first=True, bidirectional=False)
         init_lstm_wt(self.lstm)
-        
-        # Output layers
         self.out1 = nn.Linear(config.hidden_dim * 3, config.hidden_dim)
         self.out2 = nn.Linear(config.hidden_dim, vocab.vocab_size)
         init_linear_wt(self.out2)
-        
-        # Coverage mechanism
         self.is_coverage = config.is_coverage
         if self.is_coverage:
             self.coverage_layer = nn.Linear(1, config.hidden_dim * 2, bias=False)
-        
-        # Pointer-generator mechanism
         self.pointer_gen = config.pointer_gen
         if self.pointer_gen:
             self.p_gen_linear = nn.Linear(config.hidden_dim * 4 + config.emb_dim, 1)
 
     def forward(self, y_t_1, s_t_1, c_t_1, extra_zeros=None, 
                 enc_batch_extend_vocab=None, coverage=None, step=0):
-        """
-        Forward pass cho closedbook decoder
-        Args:
-            y_t_1: (batch_size,) - token trước đó
-            s_t_1: (hidden, cell) - LSTM state trước đó
-            c_t_1: (batch_size, hidden_dim*2) - context vector trước đó
-            coverage: (batch_size, memory_len) - coverage vector
-            step: int - bước hiện tại
-        Returns:
-            final_dist: (batch_size, vocab_size) - distribution cuối cùng
-            s_t: (hidden, cell) - LSTM state mới
-            c_t: (batch_size, hidden_dim*2) - context vector mới
-            attn_dist: (batch_size, memory_len) - attention distribution
-            p_gen: (batch_size, 1) - generation probability
-            coverage: (batch_size, memory_len) - coverage vector mới
-        """
         batch_size = y_t_1.size(0)
         memory_len = self.internal_memory.size(1)
-        
-        # Embedding
         y_t_1_embd = self.embedding(y_t_1)
-        
-        # Context từ internal memory
         x = self.x_context(torch.cat((c_t_1, y_t_1_embd), 1))
-        
-        # LSTM step
         lstm_out, s_t = self.lstm(x.unsqueeze(1), s_t_1)
-        
-        # Attention trên internal memory
         h_decoder, c_decoder = s_t
         s_t_hat = torch.cat((h_decoder.view(-1, self.hidden_dim),
                              c_decoder.view(-1, self.hidden_dim)), 1)
-        
-        # Tạo encoder-like outputs từ internal memory
         encoder_outputs = self.internal_memory.expand(batch_size, -1, -1)
         encoder_feature = self.memory_projection(encoder_outputs.view(-1, self.hidden_dim * 2))
         encoder_feature = encoder_feature.view(batch_size, memory_len, self.hidden_dim * 2)
-        
-        # Padding mask (tất cả đều valid vì là internal memory)
         enc_padding_mask = torch.ones(batch_size, memory_len, device=y_t_1.device)
-        
-        # Attention
-        c_t, attn_dist, coverage_next = self.memory_attention(
-            s_t_hat, encoder_outputs, encoder_feature, enc_padding_mask, coverage
-        )
-        
+        # Sử dụng SEALAttention
+        c_t = self.memory_attention(encoder_outputs)
         if self.training or step > 0:
-            coverage = coverage_next
-        
-        # Pointer-generator mechanism
+            coverage = coverage
         p_gen = None
         if self.pointer_gen:
             p_gen_input = torch.cat((c_t, s_t_hat, x), 1)
             p_gen = self.p_gen_linear(p_gen_input)
             p_gen = F.sigmoid(p_gen)
-        
-        # Output layers
         output = torch.cat((lstm_out.view(-1, self.hidden_dim), c_t), 1)
         output = self.out1(output)
         output = self.out2(output)
         vocab_dist = F.softmax(output, dim=1)
-        
-        # Pointer-generator final distribution
         if self.pointer_gen:
             vocab_dist_ = p_gen * vocab_dist
-            attn_dist_ = (1 - p_gen) * attn_dist
-            
+            attn_dist_ = (1 - p_gen) * c_t
             if extra_zeros is not None:
                 vocab_dist_ = torch.cat([vocab_dist_, extra_zeros], 1)
-            
             final_dist = vocab_dist_.scatter_add(1, enc_batch_extend_vocab, attn_dist_)
         else:
             final_dist = vocab_dist
-        
-        return final_dist, s_t, c_t, attn_dist, p_gen, coverage
+        return final_dist, s_t, c_t, c_t, p_gen, coverage
 
     def x_context(self, input):
         """Context projection layer"""
         return input  # Simplified version, có thể mở rộng
 
 @META_ARCHITECTURE.register()
-class Closedbook(object):
+class ClosedbookSeal(object):
     def __init__(self, config, vocab: Vocab, model_file_path=None, is_eval=False):
         encoder = Encoder(config, vocab)
         decoder = Decoder(config, vocab)

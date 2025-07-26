@@ -7,3 +7,7 @@ from .pointer_generator.model import PointerGeneratorModel
 from .transformer.model.transformer import TransformerModel
 from .closedbook.closedbook import Closedbook
 from .fast.copy_sum import CopySumm
+from .transformer_hepos.model.transformer_hepos import TransformerHeposModel
+from .transformer_seal.model.transformer_seal import TransformerSealModel
+from .seal_closedbook.seal_closedbook import ClosedbookSeal
+from .fast_seal.copy_sum import CopySummSeal

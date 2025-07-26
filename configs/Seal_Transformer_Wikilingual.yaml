@@ -20,31 +20,43 @@ dataset:
   test: 
     type: TextSumDataset
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 32
+  batch_size: 128
   num_workers: 16
 
 model:
-  name: LSTM_Model3layer_Wikilingual
-  architecture: LSTM_Model
+  name: Seal_Transformer_Wikilingual
+  architecture: TransformerSealModel
   d_model: 512
+  n_layers: 6
+  n_head: 8
+  ffn_hidden: 2048
+  drop_prob: 0.1
+  max_len: 1024
   encoder:
-    layer_dim: 3
-    input_dim: 512
-    hidden_size: 512
-    bidirectional: False
-    dropout: 0.1
+    d_model: 512
+    n_head: 8
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    n_layers: 6
+    max_len: 1024
+    segment_size: 512
+    device: cuda
   decoder:
-    layer_dim: 3
-    input_dim: 512
-    hidden_size: 512
-    bidirectional: False
-    dropout: 0.1
+    d_model: 512
+    n_head: 8
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    n_layers: 6
+    max_len: 1024
+    segment_size: 512
+    device: cuda
   label_smoothing: 0.1
   device: cuda
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.001
+  learning_rate: 0.15
+  lr_coverage: 0.15
   warmup: 1000
   patience: 5
   score: rouge-L

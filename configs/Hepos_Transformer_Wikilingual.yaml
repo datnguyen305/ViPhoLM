@@ -24,27 +24,38 @@ dataset:
   num_workers: 16
 
 model:
-  name: LSTM_Model3layer_Wikilingual
-  architecture: LSTM_Model
+  name: Hepos_Transformer_Wikilingual
+  architecture: TransformerHeposModel
   d_model: 512
+  n_layers: 6
+  n_head: 8
+  ffn_hidden: 2048
+  drop_prob: 0.1
+  max_len: 1024
   encoder:
-    layer_dim: 3
-    input_dim: 512
-    hidden_size: 512
-    bidirectional: False
-    dropout: 0.1
+    d_model: 512
+    n_head: 8
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    n_layers: 6
+    max_len: 1024
+    device: cuda
   decoder:
-    layer_dim: 3
-    input_dim: 512
-    hidden_size: 512
-    bidirectional: False
-    dropout: 0.1
+    d_model: 512
+    n_head: 8
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    n_layers: 6
+    max_len: 1024
+    device: cuda
+    stride: 2
   label_smoothing: 0.1
   device: cuda
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.001
+  learning_rate: 0.15
+  lr_coverage: 0.15
   warmup: 1000
   patience: 5
   score: rouge-L
