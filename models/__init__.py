@@ -11,3 +11,6 @@ from .transformer_hepos.model.transformer_hepos import TransformerHeposModel
 from .transformer_seal.model.transformer_seal import TransformerSealModel
 from .seal_closedbook.seal_closedbook import ClosedbookSeal
 from .fast_seal.copy_sum import CopySummSeal
+from .hepos.hepos import HEPOSSummarizer
+from .hat.hat_model import HATModel
+from .seneca.seneca import SENCASummarizer
