@@ -1,0 +1,52 @@
+
+vocab:
+  type: Vocab
+  path:
+    train: datasets/UIT-ViNewsOnSum-dataset/train.json
+    dev: datasets/UIT-ViNewsOnSum-dataset/dev.json
+    test: datasets/UIT-ViNewsOnSum-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/ViNewsOnSum-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/ViNewsOnSum-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/ViNewsOnSum-dataset/test.json
+  batch_size: 32
+  num_workers: 8
+
+model:
+  name: HEPOSSummarizer_UIT-ViNewsOnSum
+  architecture: HEPOSSummarizer
+  d_model: 512
+  num_heads: 8
+  stride_list: [1, 2, 4, 8, 16, 32, 64, 128]
+  num_layers: 6
+  dropout: 0.1
+  max_tgt_len: 100
+  teacher_forcing: True
+  padding_idx: 0
+  pos_encoding: sinusoidal   # hoặc learned
+  label_smoothing: 0.1
+  device: cuda
+
+
+training:
+  checkpoint_path: "checkpoints"
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+  batch_size: 32
+  lr: 1e-4
+  epochs: 20
+
+task: TextSumTask

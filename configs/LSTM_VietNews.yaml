@@ -49,4 +49,4 @@ training:
   patience: 5
   score: rouge-L
 
-task: TextSumTask
+task: HATClassificationTask

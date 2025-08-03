@@ -2,6 +2,7 @@ from builders.task_builder import build_task
 from configs.utils import get_config
 from argparse import ArgumentParser
 from tasks.text_sum_task import TextSumTask
+from tasks.hat_task import HATClassificationTask
 
 
 parser = ArgumentParser()
