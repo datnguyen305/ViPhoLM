@@ -1,4 +1,3 @@
-
 vocab:
   type: Vocab
   path:
@@ -30,22 +29,28 @@ model:
   segment_len: 128
   hidden_size: 256
   max_segments: 10
-  nhead: 8
-  num_layers_swe: 4
-  num_layers_cse: 2
+  nhead: 4
+  num_layers: 4
   encoder_layout:
-    "0": {"sentence_encoder": true, "document_encoder": false}
-    "1": {"sentence_encoder": true, "document_encoder": true}
-    "2": {"sentence_encoder": true, "document_encoder": true}
-    "3": {"sentence_encoder": true, "document_encoder": false}
-  device: cuda
-
+    "0":
+      sentence_encoder: true
+      document_encoder: false
+    "1":
+      sentence_encoder: true
+      document_encoder: true
+    "2":
+      sentence_encoder: true
+      document_encoder: true
+    "3":
+      sentence_encoder: true
+      document_encoder: true
+  device: cpu
 
 training:
   batch_size: 32
-  lr: 1e-4
+  learning_rate: 0.0001
   rl_weight: 0.5  # Trọng số cho RL loss
-  checkpoint_path: "checkpoints"
+  checkpoint_path: checkpoints
   warmup: 1000
   patience: 5
   score: rouge-L
