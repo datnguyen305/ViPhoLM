@@ -1,15 +1,15 @@
 from torch import nn
 
-from models.transformer.layers.layer_norm import LayerNorm
-from models.transformer.layers.multi_head_attention import MultiHeadAttention
-from models.transformer.layers.position_wise_feed_forward import PositionwiseFeedForward
+from models.transformer_seal.layers.layer_norm import LayerNorm
+from models.transformer_seal.layers.seal_attention import SEALAttention
+from models.transformer_seal.layers.position_wise_feed_forward import PositionwiseFeedForward
 
 
 class EncoderLayer(nn.Module):
 
-    def __init__(self, d_model, ffn_hidden, n_head, drop_prob):
+    def __init__(self, d_model, ffn_hidden, n_head, drop_prob, segment_size=512):
         super(EncoderLayer, self).__init__()
-        self.attention = MultiHeadAttention(d_model=d_model, n_head=n_head)
+        self.attention = SEALAttention(d_model=d_model, n_head=n_head, segment_size=segment_size)
         self.norm1 = LayerNorm(d_model=d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
 
@@ -20,7 +20,7 @@ class EncoderLayer(nn.Module):
     def forward(self, x, src_mask):
         # 1. compute self attention
         _x = x
-        x = self.attention(q=x, k=x, v=x, mask=src_mask)
+        x = self.attention(x, mask=src_mask)
         
         # 2. add and norm
         x = self.dropout1(x)

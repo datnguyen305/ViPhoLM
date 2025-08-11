@@ -1,0 +1,59 @@
+dataset:
+  batch_size: 4
+  dev:
+    path: datasets/Wikilingual-dataset/dev.json
+    type: TextSumDataset
+  num_workers: 4
+  test:
+    path: datasets/Wikilingual-dataset/test.json
+    type: TextSumDataset
+  train:
+    path: datasets/Wikilingual-dataset/train.json
+    type: TextSumDataset
+model:
+  architecture: TransformerHeposModel
+  d_model: 512
+  decoder:
+    d_model: 512
+    device: cpu
+    drop_prob: 0.1
+    ffn_hidden: 2048
+    max_len: 512
+    n_head: 8
+    n_layers: 6
+    stride: 2
+  device: cpu
+  drop_prob: 0.1
+  encoder:
+    d_model: 512
+    device: cpu
+    drop_prob: 0.1
+    ffn_hidden: 2048
+    max_len: 512
+    n_head: 8
+    n_layers: 6
+  ffn_hidden: 2048
+  label_smoothing: 0.1
+  max_len: 512
+  n_head: 8
+  n_layers: 6
+  name: Hepos_Transformer_Wikilingual_CPU
+task: TextSumTask
+training:
+  checkpoint_path: checkpoints
+  learning_rate: 0.0001
+  lr_coverage: 0.0001
+  patience: 10
+  score: rouge-L
+  warmup: 4000
+vocab:
+  bos_token: <bos>
+  eos_token: <eos>
+  min_freq: 3
+  pad_token: <pad>
+  path:
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+    train: datasets/Wikilingual-dataset/train.json
+  type: Vocab
+  unk_token: <unk>

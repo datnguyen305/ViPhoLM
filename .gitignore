@@ -1,7 +1,6 @@
 datasets
 __pycache__
 *.pyc
-checkpoints
 *.pth
 *.bin
 *.csv
@@ -10,3 +9,4 @@ checkpoints
 *.venv
 *.log
 *.idea
+*venv

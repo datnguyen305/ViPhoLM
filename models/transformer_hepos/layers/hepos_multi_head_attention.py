@@ -40,6 +40,10 @@ class HeposMultiHeadAttention(nn.Module):
         for h in range(self.n_head):
             # mask: (src_len,) True nếu bị mask
             mask_h = ((src_indices - h) % self.stride != 0)  # True ở vị trí không được attend
+            # Kiểm tra nếu tất cả positions bị mask
+            if mask_h.all():
+                # Nếu tất cả bị mask, chỉ cho phép attend vào position đầu tiên
+                mask_h[0] = False
             # broadcast: (B, tgt_len, src_len)
             attn_scores[:, h, :, mask_h] = float('-inf')
 

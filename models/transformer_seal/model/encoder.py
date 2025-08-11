@@ -1,7 +1,7 @@
 from torch import nn
 
-from models.transformer.blocks.encoder_layer import EncoderLayer
-from models.transformer.embedding.transformer_embedding import TransformerEmbedding
+from models.transformer_seal.blocks.encoder_layer import EncoderLayer
+from models.transformer_seal.embedding.transformer_embedding import TransformerEmbedding
 
 
 class Encoder(nn.Module):
@@ -17,7 +17,8 @@ class Encoder(nn.Module):
         self.layers = nn.ModuleList([EncoderLayer(d_model = config.d_model,
                                                   ffn_hidden = config.ffn_hidden,
                                                   n_head = config.n_head,
-                                                  drop_prob = config.drop_prob)
+                                                  drop_prob = config.drop_prob,
+                                                  segment_size = getattr(config, 'segment_size', 512))
                                      for _ in range(config.n_layers)])
 
     def forward(self, x, src_mask):

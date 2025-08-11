@@ -1,4 +1,3 @@
-# transformer.py
 import torch
 from torch import nn
 
