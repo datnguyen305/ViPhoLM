@@ -14,7 +14,6 @@ if __name__ == "__main__":
     config = get_config(config_file)
     task = build_task(config)
     vocab = task.load_vocab(config.vocab)
-    
     task.start()
     task.get_predictions()
     task.logger.info("Task done!")

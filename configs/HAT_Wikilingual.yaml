@@ -30,14 +30,21 @@ model:
   segment_len: 128
   hidden_size: 256
   max_segments: 10
-  nhead: 8
-  num_layers_swe: 4
-  num_layers_cse: 2
+  nhead: 4
+  num_layers: 4
   encoder_layout:
-    "0": {"sentence_encoder": true, "document_encoder": false}
-    "1": {"sentence_encoder": true, "document_encoder": true}
-    "2": {"sentence_encoder": true, "document_encoder": true}
-    "3": {"sentence_encoder": true, "document_encoder": false}
+    "0":
+      sentence_encoder: true
+      document_encoder: false
+    "1":
+      sentence_encoder: true
+      document_encoder: true
+    "2":
+      sentence_encoder: true
+      document_encoder: true
+    "3":
+      sentence_encoder: true
+      document_encoder: true
   device: cuda
 
 training:
