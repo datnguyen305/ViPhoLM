@@ -18,7 +18,8 @@ class Decoder(nn.Module):
         self.layers = nn.ModuleList([DecoderLayer(d_model = config.d_model,
                                                   ffn_hidden = config.ffn_hidden,
                                                   n_head = config.n_head,
-                                                  drop_prob = config.drop_prob)
+                                                  drop_prob = config.drop_prob,
+                                                  stride = stride)
                                      for _ in range(config.n_layers)])
 
         self.linear = nn.Linear(config.d_model, vocab.vocab_size)

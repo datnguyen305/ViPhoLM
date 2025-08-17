@@ -17,8 +17,15 @@ class SEALAttention(nn.Module):
         self.w_v = nn.Linear(d_model, d_model)
         self.w_concat = nn.Linear(d_model, d_model)
 
-    def forward(self, x, mask=None):
-        # x: (batch, seq_len, d_model)
+    def forward(self, q, k=None, v=None, mask=None):
+        # Nếu k và v không được cung cấp, sử dụng q (self-attention)
+        if k is None:
+            k = q
+        if v is None:
+            v = q
+        
+        # x: (batch, seq_len, d_model) - sử dụng q làm input chính
+        x = q
         B, L, _ = x.size()
         S = self.segment_size
         n_seg = (L + S - 1) // S  # số segment

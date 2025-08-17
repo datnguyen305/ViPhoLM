@@ -1,7 +1,7 @@
 from torch import nn
 
-from models.transformer.blocks.encoder_layer import EncoderLayer
-from models.transformer.embedding.transformer_embedding import TransformerEmbedding
+from models.transformer_hepos.blocks.encoder_layer import EncoderLayer
+from models.transformer_hepos.embedding.transformer_embedding import TransformerEmbedding
 
 
 class Encoder(nn.Module):
