@@ -2,9 +2,9 @@
 vocab:
   type: Vocab
   path:
-    train: datasets/UIT-ViNewsOnSum-dataset/train.json
-    dev: datasets/UIT-ViNewsOnSum-dataset/dev.json
-    test: datasets/UIT-ViNewsOnSum-dataset/test.json
+    train: datasets/sample/train.json
+    dev: datasets/sample/dev.json
+    test: datasets/sample/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
@@ -12,26 +12,26 @@ vocab:
   pad_token: <pad>
 
 dataset:
-  test: 
+  train: 
     type: TextSumDataset
-    path: C:\Users\DELL\ViPhoLM\ViPhoLM\datasets\UIT-ViNewsOnSum-dataset\test.json
-  train:
+    path: C:\Users\DELL\ViPhoLM\ViPhoLM\datasets\sample\train.json
+  dev:
     type: TextSumDataset
-    path: C:\Users\DELL\ViPhoLM\ViPhoLM\datasets\UIT-ViNewsOnSum-dataset\train.json
-  val:
+    path: C:\Users\DELL\ViPhoLM\ViPhoLM\datasets\sample\dev.json
+  test:
     type: TextSumDataset
-    path: C:\Users\DELL\ViPhoLM\ViPhoLM\datasets\UIT-ViNewsOnSum-dataset\val.json
-  batch_size: 32
+    path: C:\Users\DELL\ViPhoLM\ViPhoLM\datasets\sample\test.json
+  batch_size: 2
   num_workers: 8
 
 model:
   name: HATModel_UIT-ViNewsOnSum
   architecture: HATModel
   segment_len: 128
-  hidden_size: 256
+  hidden_size: 128
   max_segments: 64
-  nhead: 4
-  num_layers: 4 
+  nhead: 2
+  num_layers: 4
   encoder_layout:
     "0":
       sentence_encoder: true
@@ -45,11 +45,11 @@ model:
     "3":
       sentence_encoder: true
       document_encoder: true
-  device: cuda
+  device: cpu
 
 training:
-  batch_size: 32
-  learning_rate: 0.0001  # Giảm xuống 1e-4
+  batch_size: 2
+  learning_rate: 0.00001  # Giảm xuống 1e-4
   rl_weight: 0.5  # Trọng số cho RL loss
   checkpoint_path: "checkpoints"
   warmup: 1000

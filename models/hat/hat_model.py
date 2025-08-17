@@ -33,6 +33,8 @@ class HATEmbeddings(nn.Module):
         B, S, T = input_ids.size()
         token_pos_ids = torch.arange(T, device=input_ids.device).unsqueeze(0).unsqueeze(0)
         segment_pos_ids = torch.arange(S, device=input_ids.device).unsqueeze(0)
+        segment_pos_ids = segment_pos_ids.clamp(max=self.segment_pos_emb.num_embeddings - 1)
+
 
         token_emb = self.token_emb(input_ids)
         pos_emb = self.token_pos_emb(token_pos_ids)
@@ -127,6 +129,10 @@ class HATModel(nn.Module):
 
         cls_token = torch.full((B, S, 1), fill_value=1, dtype=torch.long, device=input_ids.device)
         input_ids = torch.cat([cls_token, input_ids], dim=2)  # [B, S, T+1]
+        #truncate input_ids to ensure it does not exceed max_len
+        max_len = self.segment_len * self.max_segments # Ensure max_len is set correctly
+        input_ids = input_ids[:, :max_len] # đảm bảo không bao giờ tạo L > segment_len * max_segments.
+
 
         x, seg_cls = self.embeddings(input_ids)
         x = x.view(B, S * (self.segment_len + 1), self.hidden_size)

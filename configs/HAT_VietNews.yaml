@@ -28,7 +28,7 @@ model:
   architecture: HATModel
   segment_len: 128
   hidden_size: 256
-  max_segments: 10
+  max_segments: 64
   nhead: 4
   num_layers: 4
   encoder_layout:
@@ -44,7 +44,7 @@ model:
     "3":
       sentence_encoder: true
       document_encoder: true
-  device: cpu
+  device: cuda
 
 training:
   batch_size: 32

@@ -29,7 +29,7 @@ class Vocab(object):
         counter = Counter()
         self.max_sentence_length = 0
         for json_dir in json_dirs:
-            data = json.load(open(json_dir,  encoding='utf-8'))
+            data = json.load(open(json_dir, encoding='utf-8'))
             for key in data:
                 item = data[key]
                 paragraphs = item["source"]
