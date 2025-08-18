@@ -143,8 +143,17 @@ class HATModel(nn.Module):
 
         loss = None
         if labels is not None:
+            # Lấy chiều dài sequence đã được xử lý từ tensor logits
+            processed_seq_len = logits.size(1) 
+            
+            # Cắt tensor labels để có cùng chiều dài chính xác
+            labels = labels[:, :processed_seq_len]
+            
+            # Bây giờ, cả logits và labels đều có cùng kích thước sequence
             logits_flat = logits.view(-1, logits.size(-1))
-            labels_flat = labels[:, :logits.size(1)].contiguous().view(-1)
+            labels_flat = labels.contiguous().view(-1)
+            
+            # Kích thước sẽ khớp nhau
             loss = F.cross_entropy(logits_flat, labels_flat, ignore_index=0)
 
         return logits, loss
