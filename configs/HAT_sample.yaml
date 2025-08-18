@@ -2,9 +2,9 @@
 vocab:
   type: Vocab
   path:
-    train: datasets/sample/train.json
-    dev: datasets/sample/dev.json
-    test: datasets/sample/test.json
+    train: /kaggle/input/sample/train.json
+    dev: /kaggle/input/sample/dev.json
+    test: /kaggle/input/sample/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
@@ -14,21 +14,21 @@ vocab:
 dataset:
   train: 
     type: TextSumDataset
-    path: C:\Users\DELL\ViPhoLM\ViPhoLM\datasets\sample\train.json
+    path: /kaggle/input/sample/train.json
   dev:
     type: TextSumDataset
-    path: C:\Users\DELL\ViPhoLM\ViPhoLM\datasets\sample\dev.json
+    path: /kaggle/input/sample/dev.json
   test:
     type: TextSumDataset
-    path: C:\Users\DELL\ViPhoLM\ViPhoLM\datasets\sample\test.json
-  batch_size: 2
+    path: /kaggle/input/sample/test.json
+  batch_size: 8
   num_workers: 8
 
 model:
   name: HATModel_UIT-ViNewsOnSum
   architecture: HATModel
   segment_len: 128
-  hidden_size: 128
+  hidden_size: 256
   max_segments: 64
   nhead: 2
   num_layers: 4
@@ -45,10 +45,10 @@ model:
     "3":
       sentence_encoder: true
       document_encoder: true
-  device: cpu
+  device: cuda
 
 training:
-  batch_size: 2
+  batch_size: 8
   learning_rate: 0.00001  # Giảm xuống 1e-4
   rl_weight: 0.5  # Trọng số cho RL loss
   checkpoint_path: "checkpoints"
