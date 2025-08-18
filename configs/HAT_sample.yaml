@@ -22,7 +22,7 @@ dataset:
     type: TextSumDataset
     path: /kaggle/input/sample/test.json
   batch_size: 8
-  num_workers: 8
+  num_workers: 4
 
 model:
   name: HATModel_UIT-ViNewsOnSum
