@@ -20,7 +20,7 @@ dataset:
   test: 
     type: TextSumDataset
     path: datasets/VietNews-dataset/test.json
-  batch_size: 32
+  batch_size: 8
   num_workers: 8
 
 model:
@@ -29,6 +29,7 @@ model:
   segment_len: 128
   hidden_size: 256
   max_segments: 64
+  max_length: 512  # Giới hạn độ dài tối đa của văn bản
   nhead: 4
   num_layers: 4
   encoder_layout:
@@ -47,7 +48,7 @@ model:
   device: cuda
 
 training:
-  batch_size: 32
+  batch_size: 8
   learning_rate: 0.0001
   rl_weight: 0.5  # Trọng số cho RL loss
   checkpoint_path: checkpoints
