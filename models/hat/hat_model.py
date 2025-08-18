@@ -142,18 +142,34 @@ class HATModel(nn.Module):
         logits = self.lm_head(x)
 
         loss = None
+        # start debug 
         if labels is not None:
-            # Lấy chiều dài sequence đã được xử lý từ tensor logits
-            processed_seq_len = logits.size(1) 
+            # Lấy chiều dài chuỗi mà model đã xử lý và tạo ra logits
+            processed_seq_len = logits.size(1)
+            original_label_len = labels.size(1)
+
+            # Kiểm tra xem labels có ngắn hơn logits không (chắc chắn là có)
+            if original_label_len < processed_seq_len:
+                # Tính toán số lượng cần đệm thêm
+                padding_size = processed_seq_len - original_label_len
+                
+                # Tạo một tensor đệm toàn số 0.
+                # Dùng giá trị 0 vì F.cross_entropy có ignore_index=0
+                padding = torch.zeros(
+                    (labels.size(0), padding_size), 
+                    dtype=torch.long, 
+                    device=labels.device
+                )
+                
+                # Nối labels gốc với phần đệm để chúng có cùng chiều dài
+                labels = torch.cat([labels, padding], dim=1)
             
-            # Cắt tensor labels để có cùng chiều dài chính xác
-            labels = labels[:, :processed_seq_len]
-            
-            # Bây giờ, cả logits và labels đều có cùng kích thước sequence
+            # Đề phòng trường hợp hiếm labels dài hơn, ta cắt bớt
+            elif original_label_len > processed_seq_len:
+                labels = labels[:, :processed_seq_len]
+
             logits_flat = logits.view(-1, logits.size(-1))
             labels_flat = labels.contiguous().view(-1)
-            
-            # Kích thước sẽ khớp nhau
             loss = F.cross_entropy(logits_flat, labels_flat, ignore_index=0)
 
         return logits, loss
