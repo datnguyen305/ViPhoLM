@@ -20,8 +20,8 @@ dataset:
   test: 
     type: TextSumDataset
     path: /kaggle/input/vietnews-dataset/test.json
-  batch_size: 8
-  num_workers: 8
+  batch_size: 4
+  num_workers: 4
 
 model:
   name: HATModel_VietNews
@@ -48,7 +48,7 @@ model:
   device: cuda
 
 training:
-  batch_size: 8
+  batch_size: 4
   learning_rate: 0.0001
   rl_weight: 0.5  # Trọng số cho RL loss
   checkpoint_path: checkpoints
