@@ -14,3 +14,4 @@ from .fast_seal.copy_sum import CopySummSeal
 from .hepos.hepos import HEPOSSummarizer
 from .hat.hat_model import HATModel
 from .seneca.seneca import SENCASummarizer
+from .longformer.longformer_encoder_decoder import LongformerEncoderDecoderModel
