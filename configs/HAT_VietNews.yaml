@@ -1,9 +1,9 @@
 vocab:
   type: Vocab
   path:
-    train: /kaggle/input/vietnews-dataset/train.json
-    dev: /kaggle/input/vietnews-dataset/dev.json
-    test: /kaggle/input/vietnews-dataset/test.json
+    train: datasets/VietNews-dataset/train.json
+    dev: datasets/VietNews-dataset/dev.json
+    test: datasets/VietNews-dataset/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
@@ -13,15 +13,15 @@ vocab:
 dataset:
   train: 
     type: TextSumDataset
-    path: /kaggle/input/vietnews-dataset/train.json
+    path: datasets/VietNews-dataset/train.json
   dev:
     type: TextSumDataset
-    path: /kaggle/input/vietnews-dataset/dev.json
+    path: datasets/VietNews-dataset/dev.json
   test: 
     type: TextSumDataset
-    path: /kaggle/input/vietnews-dataset/test.json
-  batch_size: 4
-  num_workers: 4
+    path: datasets/VietNews-dataset/test.json
+  batch_size: 8
+  num_workers: 8
 
 model:
   name: HATModel_VietNews
@@ -48,7 +48,7 @@ model:
   device: cuda
 
 training:
-  batch_size: 4
+  batch_size: 8
   learning_rate: 0.0001
   rl_weight: 0.5  # Trọng số cho RL loss
   checkpoint_path: checkpoints
