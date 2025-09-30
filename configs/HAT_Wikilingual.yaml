@@ -28,7 +28,7 @@ model:
   architecture: HATModel
   segment_len: 128
   hidden_size: 256
-  max_segments: 10
+  max_segments: 64
   nhead: 4
   num_layers: 4
   encoder_layout:
@@ -48,7 +48,11 @@ model:
 
 training:
   batch_size: 32
+<<<<<<< HEAD
   learning_rate: 0.0005
+=======
+  learning_rate: 0.0001
+>>>>>>> ad09ab838eb0c013beef983fe077f612539dd4ed
   rl_weight: 0.5  # Trọng số cho RL loss
   checkpoint_path: "checkpoints"
   warmup: 1000
