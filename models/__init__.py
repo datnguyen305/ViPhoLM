@@ -1,5 +1,5 @@
 from .lstm.lstm import LSTM_Model 
-from .bilstm.bilstm import BiLSTM_Model
+from .bilstm.bilstm import BiLSTMModel
 from .bigru.bigru import BiGRU_Model
 from .gru.gru import GRU_Model
 from .abstractiveRNN.abstractiveRNN import abstractiveRNN_model
@@ -14,3 +14,4 @@ from .fast_seal.copy_sum import CopySummSeal
 from .hepos.hepos import HEPOSSummarizer
 from .hat.hat_model import HATModel
 from .seneca.seneca import SENCASummarizer
+from .longformer.longformer_encoder_decoder import LongformerEncoderDecoderModel

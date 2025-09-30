@@ -20,8 +20,8 @@ dataset:
   test: 
     type: TextSumDataset
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 128
-  num_workers: 16
+  batch_size: 8
+  num_workers: 4
 
 model:
   name: Seal_Transformer_Wikilingual

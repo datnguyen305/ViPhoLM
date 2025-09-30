@@ -21,34 +21,34 @@ dataset:
   test:
     type: TextSumDataset
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 8
-  num_workers: 4
+  batch_size: 32
+  num_workers: 16
 
 
 model:
   name: closedbook_VietNews
-  architecture: closedbook
-  d_model: 256
+  architecture: Closedbook
+  d_model: 512
   checkpoint: "checkpoints/closedbook_model.pt"
   encoder:
     layer_dim: 1
-    input_dim: 256
-    hidden_size: 256
+    input_dim: 512
+    hidden_size: 512
     bidirectional: True
     dropout: 0.1
   decoder:
     layer_dim: 1
-    input_dim: 256
-    hidden_size: 256
+    input_dim: 512
+    hidden_size: 512
     bidirectional: False
     dropout: 0.1
 # Hyperparameters
   use_gpu: True
   pointer_gen : True
   is_coverage : True
-  hidden_dim: 256
+  hidden_dim: 512
   emb_dim: 128
-  batch_size: 8
+  batch_size: 32
   max_enc_steps: 400
   max_dec_steps: 100
   beam_size: 4
@@ -59,10 +59,12 @@ model:
   trunc_norm_init_std: 0.0001
   max_grad_norm: 2.0
   device: cuda
-  gamma: 1.0
+  gamma: 0.5
+  hidden_size: 512
+  dropout: 0.1
 training:
   checkpoint_path: "checkpoints"
-  lr: 0.15
+  lr: 0.0001
   lr_coverage: 0.15
 
 

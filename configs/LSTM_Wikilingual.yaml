@@ -28,7 +28,7 @@ model:
   architecture: LSTM_Model
   d_model: 512
   encoder:
-    layer_dim: 3
+    layer_dim: 3 #LSTM 3 layers
     input_dim: 512
     hidden_size: 512
     bidirectional: False
