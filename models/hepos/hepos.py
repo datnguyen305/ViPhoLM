@@ -1,191 +1,121 @@
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from argparse import Namespace
 from builders.model_builder import META_ARCHITECTURE
 from vocabs.vocab import Vocab
+from fairseq.data.dictionary import Dictionary
+from models.hepos.longbartmodel import LongBartModel 
 
-def to_cuda(tensor):
-    return tensor.cuda() if torch.cuda.is_available() else tensor
-
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.1, max_len=2048):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        x = x + self.pe[:, :x.size(1)].to(x.device)
-        return self.dropout(x)
+def convert_vocab_to_fairseq_dictionary(vocab: Vocab) -> Dictionary:
+    """Hàm tiện ích để chuyển đổi Vocab của bạn sang Dictionary của Fairseq."""
+    d = Dictionary()
+    for i in range(len(vocab)):
+        d.add_symbol(vocab.get_token_from_index(i))
+    d.finalize()
+    return d
 
 @META_ARCHITECTURE.register()
-class HEPOSSummarizer(nn.Module):
+class HeposFairseqBaseline(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super().__init__()
-        self.d_model = config.d_model
-        self.num_heads = config.num_heads
-        self.stride_list = config.stride_list
-        self.num_layers = config.num_layers
-        self.vocab_size = len(vocab)
-        self.padding_idx = config.padding_idx
-        self.dropout = config.dropout
-        self.max_tgt_len = config.max_tgt_len
-        self.teacher_forcing = config.teacher_forcing
+        self.config = config
+        self.vocab = vocab
+        self.padding_idx = vocab.pad_idx
 
-        self.embedding = nn.Embedding(self.vocab_size, self.d_model, padding_idx=self.padding_idx)
-        self.positional_encoding = PositionalEncoding(self.d_model, dropout=self.dropout, max_len=2048)
+        # --- Bước 1: Tạo đối tượng "args" giả lập cho Fairseq ---
+        # Fairseq model được cấu hình bằng args, không phải object config.
+        # Chúng ta sẽ chuyển đổi config của bạn thành args.
+        args = self.create_fairseq_args()
 
-        self.encoder_layers = nn.ModuleList([
-            HEPOSEncoderLayer(
-                d_model=self.d_model,
-                num_heads=self.num_heads,
-                stride_list=self.stride_list,
-                dropout=self.dropout
-            ) for _ in range(self.num_layers)
-        ])
+        # --- Bước 2: Tạo Dictionary của Fairseq từ Vocab của bạn ---
+        self.fairseq_dictionary = convert_vocab_to_fairseq_dictionary(vocab)
 
-        self.decoder_rnn = nn.LSTM(
-            input_size=self.d_model,
-            hidden_size=self.d_model,
-            num_layers=self.num_layers,
-            dropout=self.dropout,
-            batch_first=True
+        # --- Bước 3: Khởi tạo mô hình LongBartModel của tác giả ---
+        # Lớp này sẽ sử dụng các file sinkhorn.py, sparse_decoder.py, v.v.
+        self.model = LongBartModel.build_model(args, None)
+        
+        # Đồng bộ embedding layer nếu cần
+        # Fairseq model có embed_tokens riêng, chúng ta cần đảm bảo nó có đúng kích thước
+        self.model.encoder.embed_tokens = self.build_embedding(
+            len(self.fairseq_dictionary), config.d_model, self.padding_idx
         )
+        self.model.decoder.embed_tokens = self.model.encoder.embed_tokens
 
-        self.cross_attention = HEPOSCrossAttention(
-            d_model=self.d_model,
-            num_heads=self.num_heads,
-            stride_list=self.stride_list
+    def create_fairseq_args(self) -> Namespace:
+        """Tạo một đối tượng Namespace chứa các cấu hình cần thiết cho LongBartModel."""
+        args = Namespace(
+            # Cấu hình kiến trúc cơ bản
+            encoder_embed_dim=self.config.d_model,
+            encoder_ffn_embed_dim=self.config.d_model * 4,
+            encoder_layers=self.config.num_encoder_layers,
+            encoder_attention_heads=self.config.num_heads,
+            decoder_embed_dim=self.config.d_model,
+            decoder_ffn_embed_dim=self.config.d_model * 4,
+            decoder_layers=self.config.num_decoder_layers,
+            decoder_attention_heads=self.config.num_heads,
+            activation_fn="gelu",
+            dropout=self.config.dropout,
+            attention_dropout=self.config.attention_dropout,
+            max_source_positions=self.config.max_src_len,
+            max_target_positions=self.config.max_tgt_len,
+            no_token_positional_embeddings=False,
+            encoder_learned_pos=True,
+            layernorm_embedding=True,
+            share_decoder_input_output_embed=True,
+            
+            # --- Cấu hình CỐT LÕI cho baseline ---
+            # Kích hoạt Sinkhorn cho Encoder
+            sinkhorn=True, 
+            bucket_size=self.config.sinkhorn_bucket_size,
+            encoder_not_hybrid=True, # Sử dụng sinkhorn cho tất cả các lớp
+
+            # Kích hoạt HEPOS (stride) cho Decoder
+            decoder_divide_attention=True,
+            divide_type='stride',
+            divide_ratio=self.config.hepos_stride_size,
+            
+            # Tắt các tùy chọn không cần thiết khác
+            lsh_attention=False,
+            sw=False,
+            encoder_linear=False,
+            decoder_linear_attention=False,
+            # (Thêm các cờ khác và đặt là False nếu cần)
         )
+        return args
 
-        self.output_layer = nn.Linear(self.d_model, self.vocab_size)
+    def build_embedding(self, num_embeddings, embedding_dim, padding_idx):
+        """Hàm tiện ích để tạo embedding layer."""
+        m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
+        nn.init.constant_(m.weight[padding_idx], 0)
+        return m
 
-    def forward(self, src, tgt=None):
-        src_emb = self.embedding(src)
-        src_emb = self.positional_encoding(src_emb)
-        for layer in self.encoder_layers:
-            src_emb = layer(src_emb)
-        encoder_output = src_emb
+    def forward(self, src_tokens, tgt_tokens, **kwargs):
+        """
+        Hàm forward của wrapper.
+        Nó nhận input từ pipeline của bạn và chuyển đổi cho phù hợp với Fairseq model.
+        """
+        # Fairseq decoder cần `prev_output_tokens` (target được dịch phải 1 vị trí)
+        # để dự đoán token tiếp theo (teacher forcing).
+        prev_output_tokens = self.prepare_decoder_input(tgt_tokens)
 
-        if tgt is not None and self.teacher_forcing:
-            tgt_emb = self.embedding(tgt)
-            tgt_emb = self.positional_encoding(tgt_emb)
-            decoder_output, _ = self.decoder_rnn(tgt_emb)
-            context = self.cross_attention(decoder_output, encoder_output)
-            final_output = decoder_output + context
-            logits = self.output_layer(final_output)
-        else:
-            batch_size = src.size(0)
-            decoder_input = to_cuda(torch.zeros(batch_size, 1).long())
-            hidden = None
-            logits = []
-            for _ in range(self.max_tgt_len):
-                emb = self.embedding(decoder_input)
-                emb = self.positional_encoding(emb)
-                decoder_output, hidden = self.decoder_rnn(emb, hidden)
-                context = self.cross_attention(decoder_output, encoder_output)
-                final_output = decoder_output + context
-                logit = self.output_layer(final_output.squeeze(1))
-                logits.append(logit)
-                decoder_input = logit.argmax(-1).unsqueeze(1)
-            logits = torch.stack(logits, dim=1)
-
-        return logits
-
-class HEPOSEncoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, stride_list, dropout=0.1):
-        super().__init__()
-        self.self_attn = HEPOSSelfAttention(d_model, num_heads, stride_list)
-        self.norm = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout(dropout)
-        self.ffn = nn.Sequential(
-            nn.Linear(d_model, d_model * 4),
-            nn.ReLU(),
-            nn.Linear(d_model * 4, d_model)
+        # Gọi hàm forward của mô hình Fairseq gốc
+        # `src_lengths` có thể không cần thiết nếu bạn đã padding tất cả các câu
+        # về cùng một độ dài trong batch.
+        decoder_output, extra = self.model(
+            src_tokens=src_tokens,
+            src_lengths=None, 
+            prev_output_tokens=prev_output_tokens
         )
+        
+        # decoder_output chính là logits bạn cần cho hàm loss.
+        return decoder_output
 
-    def forward(self, x):
-        attn_output = self.self_attn(x)
-        x = self.norm(x + self.dropout(attn_output))
-        ffn_output = self.ffn(x)
-        return self.norm(x + self.dropout(ffn_output))
-
-class HEPOSSelfAttention(nn.Module):
-    def __init__(self, d_model, num_heads, stride_list):
-        super().__init__()
-        self.d_model = d_model
-        self.num_heads = num_heads
-        self.head_dim = d_model // num_heads
-        self.stride_list = stride_list
-
-        self.qkv_proj = nn.Linear(d_model, 3 * d_model)
-        self.out_proj = nn.Linear(d_model, d_model)
-
-    def forward(self, x):
-        B, L, _ = x.shape
-        qkv = self.qkv_proj(x)
-        q, k, v = qkv.chunk(3, dim=-1)
-
-        q = q.view(B, L, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.view(B, L, self.num_heads, self.head_dim).transpose(1, 2)
-        v = v.view(B, L, self.num_heads, self.head_dim).transpose(1, 2)
-
-        outputs = []
-        for h in range(self.num_heads):
-            stride = self.stride_list[h]
-            k_strided = k[:, h, ::stride, :]
-            v_strided = v[:, h, ::stride, :]
-            scores = torch.matmul(q[:, h], k_strided.transpose(-2, -1)) / (self.head_dim ** 0.5)
-            attn = F.softmax(scores, dim=-1)
-            out = torch.matmul(attn, v_strided)
-            outputs.append(out)
-
-        output = torch.stack(outputs, dim=1).transpose(1, 2).reshape(B, L, self.d_model)
-        return self.out_proj(output)
-
-class HEPOSCrossAttention(nn.Module):
-    def __init__(self, d_model, num_heads, stride_list):
-        super().__init__()
-        self.d_model = d_model
-        self.num_heads = num_heads
-        self.stride_list = stride_list
-        self.head_dim = d_model // num_heads
-
-        assert len(stride_list) == num_heads, "Cần stride cho mỗi head"
-
-        self.query_proj = nn.Linear(d_model, d_model)
-        self.key_proj = nn.Linear(d_model, d_model)
-        self.value_proj = nn.Linear(d_model, d_model)
-        self.out_proj = nn.Linear(d_model, d_model)
-
-    def forward(self, decoder_input, encoder_output):
-        B, T, _ = decoder_input.shape
-        _, S, _ = encoder_output.shape
-
-        Q = self.query_proj(decoder_input)
-        K = self.key_proj(encoder_output)
-        V = self.value_proj(encoder_output)
-
-        Q = Q.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
-        K = K.view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
-        V = V.view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
-
-        outputs = []
-        for h in range(self.num_heads):
-            stride = self.stride_list[h]
-            K_h = K[:, h, ::stride, :]
-            V_h = V[:, h, ::stride, :]
-            scores = torch.matmul(Q[:, h], K_h.transpose(-2, -1)) / (self.head_dim ** 0.5)
-            attn = F.softmax(scores, dim=-1)
-            out = torch.matmul(attn, V_h)
-            outputs.append(out)
-
-        output = torch.stack(outputs, dim=1).transpose(1, 2).reshape(B, T, self.d_model)
-        return self.out_proj(output)
+    def prepare_decoder_input(self, tgt_tokens):
+        """Tạo prev_output_tokens từ target tokens cho teacher forcing."""
+        # Dịch phải target sequence
+        prev_output_tokens = tgt_tokens.clone()
+        # Chèn token bắt đầu câu (EOS trong Fairseq thường là 2) ở đầu
+        prev_output_tokens[:, 0] = self.fairseq_dictionary.eos()
+        prev_output_tokens[:, 1:] = tgt_tokens[:, :-1]
+        return prev_output_tokens

@@ -1,129 +1,140 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from builders.model_builder import META_ARCHITECTURE
-from vocabs.vocab import Vocab
-
-def to_cuda(tensor):
-    return tensor.cuda() if torch.cuda.is_available() else tensor
-
-class EntityCNNEncoder(nn.Module):
-    def __init__(self, d_model, kernel_size=3):
-        super().__init__()
-        self.conv = nn.Conv1d(d_model, d_model, kernel_size, padding=1)
-
-    def forward(self, entity_seq):
-        x = entity_seq.transpose(1, 2)
-        x = F.relu(self.conv(x))
-        return x.transpose(1, 2)
-
-class SentenceEncoder(nn.Module):
-    def __init__(self, d_model):
-        super().__init__()
-        self.conv = nn.Conv1d(d_model, d_model, kernel_size=3, padding=1)
-        self.bilstm = nn.LSTM(d_model, d_model, batch_first=True, bidirectional=True)
-
-    def forward(self, sent_emb):
-        x = sent_emb.transpose(1, 2)
-        x = F.relu(self.conv(x)).transpose(1, 2)
-        outputs, _ = self.bilstm(x)
-        return outputs
-
-class ContentSelector(nn.Module):
-    def __init__(self, d_model):
-        super().__init__()
-        self.lstm = nn.LSTM(d_model * 2, d_model, batch_first=True)
-        self.attn_entity = nn.Linear(d_model + d_model, 1)
-        self.attn_sent = nn.Linear(d_model + d_model * 2, 1)
-        self.prob_proj = nn.Linear(d_model * 3, 1)
-
-    def forward(self, sents, entities):
-        batch, n_sent, _ = sents.size()
-        h_t = torch.zeros(1, batch, sents.size(-1)).to(sents.device)
-        c_t = torch.zeros(1, batch, sents.size(-1)).to(sents.device)
-        selected = []
-
-        for _ in range(3):
-            ent_ctx = self.attend(entities, h_t[-1], self.attn_entity)
-            sent_ctx = self.attend(sents, h_t[-1], self.attn_sent)
-            context = torch.cat([h_t[-1], ent_ctx, sent_ctx], dim=-1)
-            p = torch.sigmoid(self.prob_proj(context))
-            top_idx = torch.topk(p.squeeze(-1), 1)[1]
-            selected_sent = sents[torch.arange(batch), top_idx]
-            lstm_input = torch.cat([selected_sent, ent_ctx], dim=-1).unsqueeze(1)
-            _, (h_t, c_t) = self.lstm(lstm_input, (h_t, c_t))
-            selected.append(selected_sent.unsqueeze(1))
-
-        return torch.cat(selected, dim=1)
-
-    def attend(self, memory, query, attn_layer):
-        query = query.unsqueeze(1).expand(-1, memory.size(1), -1)
-        scores = attn_layer(torch.cat([query, memory], dim=-1)).squeeze(-1)
-        weights = F.softmax(scores, dim=-1)
-        return torch.bmm(weights.unsqueeze(1), memory).squeeze(1)
-
-class AbstractGenerator(nn.Module):
-    def __init__(self, d_model, vocab_size, padding_idx):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, d_model, padding_idx=padding_idx)
-        self.decoder = nn.LSTM(d_model, d_model, batch_first=True)
-        self.copy_attn = nn.Linear(d_model * 2, 1)
-        self.out_proj = nn.Linear(d_model, vocab_size)
-
-    def forward(self, selected, tgt=None, max_len=50, teacher_forcing=False):
-        batch = selected.size(0)
-        hidden = None
-        outputs = []
-        input_token = torch.zeros(batch, 1, dtype=torch.long, device=selected.device)
-
-        for t in range(max_len):
-            emb = self.embedding(input_token)
-            dec_out, hidden = self.decoder(emb, hidden)
-            copy_score = self.copy_attn(torch.cat([dec_out, selected.mean(1, keepdim=True)], dim=-1))
-            vocab_logits = self.out_proj(dec_out)
-            final_logits = vocab_logits + copy_score
-            outputs.append(final_logits)
-            input_token = tgt[:, t].unsqueeze(1) if teacher_forcing and tgt is not None else final_logits.argmax(-1)
-
-        return torch.cat(outputs, dim=1)
+from torch import nn
+from builders.model_builder import META_ARCHITECTURE 
+from models.seneca.extractor import EntityAwareExtractor
+from models.seneca.generator import AbstractGenerator
+from vocabs.vocab import Vocab 
 
 @META_ARCHITECTURE.register()
-class SENCASummarizer(nn.Module):
-    def __init__(self, config, vocab: Vocab):
+class SENECAModel(nn.Module):
+    """
+    Kiến trúc SENECA hoàn chỉnh, kết hợp Extractor và Generator.
+    Đây là model sẽ được đăng ký và sử dụng làm baseline trong framework META.
+    """
+    def __init__(self, cfg):
+        """
+        Hàm khởi tạo, nhận vào một đối tượng config (cfg) chung.
+        cfg nên chứa các cấu hình con cho Extractor và Generator.
+        """
         super().__init__()
-        self.d_model = config.d_model
-        self.padding_idx = config.padding_idx
-        self.max_tgt_len = config.max_tgt_len
-        self.teacher_forcing = config.teacher_forcing
+        self.cfg = cfg
+        self.vocab = Vocab(cfg.MODEL.VOCAB)
 
-        self.embedding = nn.Embedding(len(vocab), self.d_model, padding_idx=self.padding_idx)
-        self.entity_emb = nn.Embedding(config.num_entity_types, self.d_model)
+        vocab_size = self.vocab.vocab_size
+        
+        # --- Khởi tạo Module 1: Extractor ---
+        # Lấy config dành riêng cho Extractor
+        ext_cfg = cfg.MODEL.SENECA.EXTRACTOR
+        self.extractor = EntityAwareExtractor(
+            vocab_size=cfg.MODEL.VOCAB_SIZE,
+            emb_dim=ext_cfg.EMB_DIM,
+            conv_hidden=ext_cfg.CONV_HIDDEN,
+            lstm_hidden=ext_cfg.LSTM_HIDDEN,
+            lstm_layer=ext_cfg.LSTM_LAYER,
+            bidirectional=ext_cfg.BIDIRECTIONAL,
+            n_hop=ext_cfg.N_HOP,
+            dropout=ext_cfg.DROPOUT
+        )
+        
+        # --- Khởi tạo Module 2: Generator ---
+        # Lấy config dành riêng cho Generator
+        gen_cfg = cfg.MODEL.SENECA.GENERATOR
+        self.generator = AbstractGenerator(
+            vocab_size=cfg.MODEL.VOCAB_SIZE,
+            emb_dim=gen_cfg.EMB_DIM,
+            n_hidden=gen_cfg.N_HIDDEN,
+            bidirectional=gen_cfg.BIDIRECTIONAL,
+            n_layer=gen_cfg.N_LAYER,
+            dropout=gen_cfg.DROPOUT
+        )
 
-        self.entity_encoder = EntityCNNEncoder(self.d_model)
-        self.sent_encoder = SentenceEncoder(self.d_model)
-        self.selector = ContentSelector(self.d_model)
-        self.generator = AbstractGenerator(self.d_model, len(vocab), self.padding_idx)
-
-    def forward(self, src, src_entities, tgt=None):
-        src_emb = self.embedding(src)
-        ent_emb = self.entity_emb(src_entities)
-        ent_repr = self.entity_encoder(ent_emb)
-        sent_repr = self.sent_encoder(src_emb)
-        selected = self.selector(sent_repr, ent_repr)
-        logits = self.generator(selected, tgt, max_len=self.max_tgt_len, teacher_forcing=self.teacher_forcing and tgt is not None)
-        return logits
-    def predict(self, src, src_entities, max_len=None):
+    def _get_sents_from_indices(self, article_sents, indices):
         """
-        Inference mode: autoregressive decoding without teacher forcing.
+        Hàm tiện ích để lấy nội dung các câu từ chỉ số mà Extractor trả về.
+        - article_sents: [B, max_sents, max_words]
+        - indices: List của list, ví dụ [[1, 5, 2], [0, 2]]
         """
-        self.eval()
-        max_len = max_len or self.max_tgt_len
-        with torch.no_grad():
-            src_emb = self.embedding(src)
-            ent_emb = self.entity_emb(src_entities)
-            ent_repr = self.entity_encoder(ent_emb)
-            sent_repr = self.sent_encoder(src_emb)
-            selected = self.selector(sent_repr, ent_repr)
-            logits = self.generator(selected, tgt=None, max_len=max_len, teacher_forcing=False)
-            output_ids = logits.argmax(dim=-1)  # (batch, seq_len)
-        return output_ids
+        # Đây là một cách triển khai đơn giản, bạn có thể cần tối ưu hóa
+        batch_extracted_sents = []
+        for i, idx_list in enumerate(indices):
+            # Sắp xếp các chỉ số để giữ trật tự câu gốc
+            sorted_indices = sorted(idx_list)
+            sents = [article_sents[i][j] for j in sorted_indices]
+            batch_extracted_sents.append(torch.stack(sents))
+        
+        # Cần padding lại batch này để có cùng số câu
+        # (Logic padding có thể được đặt trong một hàm utils chung)
+        padded_batch = nn.utils.rnn.pad_sequence(batch_extracted_sents, batch_first=True, padding_value=0)
+        return padded_batch
+
+    def forward(self, batch, mode='train_supervised'):
+        """
+        Forward pass chính của mô hình.
+        - batch: Một dict chứa tất cả dữ liệu cần thiết.
+        - mode: Chế độ hoạt động ('train_supervised', 'inference').
+        """
+        if mode == 'train_supervised':
+            # --- Giai đoạn huấn luyện có giám sát ---
+            # Mục tiêu là huấn luyện riêng lẻ Extractor và Generator
+            
+            # 1. Huấn luyện Extractor
+            # Extractor học cách dự đoán các chỉ số câu đúng (target_indices)
+            extraction_scores = self.extractor(
+                batch['article_sents'], batch['sent_nums'],
+                batch['clusters'], batch['cluster_nums'],
+                batch['target_indices']  # Dùng teacher forcing
+            )
+            
+            # 2. Huấn luyện Generator
+            # Generator học cách tóm tắt từ các câu trích xuất đúng (ground-truth)
+            # Lấy các câu trích xuất đúng từ dữ liệu
+            gt_extracted_sents = self._get_sents_from_indices(batch['article_sents'], batch['target_indices'])
+            
+            summary_logits = self.generator(
+                article=gt_extracted_sents,
+                art_lens=batch['gt_extracted_len'], # Cần được cung cấp trong batch
+                abstract=batch['abstract'],
+                extend_art=batch['extend_art'], # Dữ liệu cho cơ chế copy
+                extend_vsize=batch['extend_vsize']
+            )
+            
+            # Trả về output để tính 2 loss riêng biệt
+            return {
+                'extraction_scores': extraction_scores,
+                'summary_logits': summary_logits
+            }
+            
+        elif mode == 'inference':
+            # --- Giai đoạn suy luận (tạo tóm tắt thực tế) ---
+            # Pipeline end-to-end
+            
+            # 1. Extractor trích xuất ra các chỉ số câu tốt nhất
+            # Hàm `extract` trong extractor cần được triển khai để không dùng teacher forcing
+            extracted_indices = self.extractor.extract(
+                batch['article_sents'], batch['sent_nums'],
+                batch['clusters'], batch['cluster_nums'], k=4 # k là số câu muốn trích xuất
+            )
+            
+            # 2. Lấy nội dung các câu đã trích xuất
+            extracted_sents = self._get_sents_from_indices(batch['article_sents'], extracted_indices)
+            # 3. Generator tạo tóm tắt từ các câu đã trích xuất
+            summaries = self.generator.batched_beamsearch(
+                article=extracted_sents,
+                art_lens=[len(s) for s in extracted_sents],
+                extend_art=batch['extend_art'],
+                extend_vsize=batch['extend_vsize'],
+                # Lấy token ID trực tiếp từ đối tượng vocab của model
+                go=self.vocab.bos_idx, 
+                eos=self.vocab.eos_idx, 
+                unk=self.vocab.unk_idx,
+                max_len=self.cfg.INFERENCE.MAX_LEN, 
+                beam_size=self.cfg.INFERENCE.BEAM_SIZE
+            )
+            
+            return summaries
+        else:
+            raise ValueError(f"Chế độ không hợp lệ: {mode}")
+        
+    def decode(self, tensor_indices):
+        """Sử dụng vocab nội bộ để giải mã một tensor chỉ số thành câu."""
+        return self.vocab.decode_sentence(tensor_indices)

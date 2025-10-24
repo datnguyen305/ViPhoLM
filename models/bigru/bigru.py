@@ -127,7 +127,7 @@ class BiGRU_Model(nn.Module):
             decoder_input = decoder_output.argmax(dim=-1).unsqueeze(1)  # [batch_size, 1]
             outputs.append(decoder_input)
             
-            if (decoder_input.item() == self.vocab.eos_idx).all():
+            if (decoder_input == self.vocab.eos_idx).all():
                 break
         
         outputs = torch.cat(outputs, dim=1) # [batch_size, seq_len]
