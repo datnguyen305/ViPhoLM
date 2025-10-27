@@ -1,5 +1,7 @@
 vocab:
-  type: VocabWithFeatures
+  type: RichVocab
+  max_sents: 50
+  max_sent_len: 100
   path:
     train: datasets/Wikilingual-dataset/train.json
     dev: datasets/Wikilingual-dataset/dev.json
@@ -15,21 +17,30 @@ vocab:
   tfidf:
     smooth_idf: true
     sublinear_tf: true
+
 dataset:
   train:
-    type: TextSumDataset
+    type: HierarchicalTextSumDataset
     path: datasets/Wikilingual-dataset/train.json
+    max_sents: 50
+    max_sent_len: 100
   dev:
-    type: TextSumDataset
+    type: HierarchicalTextSumDataset
     path: datasets/Wikilingual-dataset/dev.json
+    max_sents: 50
+    max_sent_len: 100
   test:
-    type: TextSumDataset
+    type: HierarchicalTextSumDataset
     path: datasets/Wikilingual-dataset/test.json
+    max_sents: 50
+    max_sent_len: 100
   batch_size: 32
   num_workers: 16
+
 model:
-  name: abstractiveRNN_Wikilingual
-  architecture: abstractiveRNN
+  layer_dim: 3
+  name: AbstractiveTXModel_3layer_Wikilingual
+  architecture: AbstractiveTXModel
   hidden_size: 512
   device: cuda
   dropout: 0.5
@@ -46,10 +57,13 @@ model:
     dec_emb_dim: 256
     dec_hid_dim: 512
     attention_dim: 256
+    bidirectional: false
+
 training:
   checkpoint_path: checkpoints
-  learning_rate: 0.5
+  learning_rate: 0.005
   warmup: 1000
   patience: 5
   score: rouge-L
+
 task: TextSumTask

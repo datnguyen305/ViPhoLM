@@ -1,2 +1,3 @@
 from .vocab import Vocab
-from .VocabWithFeatures import VocabWithFeatures
+from .viword_vocab import ViWordVocab
+from .richfeatures import RichVocab
