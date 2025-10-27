@@ -100,10 +100,10 @@ class GRU_Model(nn.Module):
         batch_size = encoder_outputs.size(0)
         decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=encoder_outputs.device).fill_(self.vocab.bos_idx)
         
-        decoder_hidden, decoder_memory = encoder_states
+        decoder_hidden = encoder_states
         outputs = []
         for _ in range(self.MAX_LENGTH):
-            decoder_output, (decoder_hidden, decoder_memory) = self.decoder.forward_step(decoder_input, (decoder_hidden, decoder_memory))
+            decoder_output, decoder_hidden = self.decoder.forward_step(decoder_input, decoder_hidden)
             decoder_input = decoder_output.argmax(dim=-1)
             outputs.append(decoder_input)
             
