@@ -42,7 +42,7 @@ model:
   name: AbstractiveTXModel_3layer_Wikilingual
   architecture: AbstractiveTXModel
   hidden_size: 512
-  device: cuda
+  device: cpu
   dropout: 0.5
   teacher_forcing_ratio: 0.5
   coverage_loss_weight: 0.1
