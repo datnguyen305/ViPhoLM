@@ -40,6 +40,10 @@ class Encoder(nn.Module):
         
     def forward(self, input, input_lengths):
         embedded = self.dropout(self.embedding(input))
+
+        # lengths trên cpu, kiểu long
+        input_lengths = input_lengths.cpu().long()
+
         packed = pack_padded_sequence(embedded, input_lengths, batch_first=True, enforce_sorted=False)
 
         outputs, (h, c) = self.lstm(packed)
