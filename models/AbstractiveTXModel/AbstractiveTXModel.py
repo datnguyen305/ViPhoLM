@@ -21,7 +21,7 @@ class HierarchicalEncoder(nn.Module):
         # Word-level encoder
         self.embedding = nn.Embedding(vocab.vocab_size, config.hidden_size)
         self.word_gru = nn.GRU(
-            config.hidden_size * 2 if config.encoder.bidirectional else config.hidden_size,
+            config.hidden_size,
             config.hidden_size,
             batch_first=True,
             bidirectional=config.encoder.bidirectional,

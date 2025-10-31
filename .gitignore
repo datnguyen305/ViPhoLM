@@ -9,3 +9,6 @@ __pycache__
 *.log
 *.idea
 *venv
+**tvm/
+**datasets/
+**checkpoints/

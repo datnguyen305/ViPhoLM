@@ -1,9 +1,9 @@
 vocab:
   type: Vocab
   path:
-    train: datasets/UIT-Vietnews-dataset/train.json
-    dev: datasets/UIT-Vietnews-dataset/dev.json
-    test: datasets/UIT-Vietnews-dataset/test.json
+    train: datasets/UIT-ViNewsOnSum-dataset/train.json
+    dev: datasets/UIT-ViNewsOnSum-dataset/dev.json
+    test: datasets/UIT-ViNewsOnSum-dataset/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
@@ -13,18 +13,18 @@ vocab:
 dataset:
   train: 
     type: TextSumDataset
-    path: datasets/UIT-Vietnews-dataset/train.json
+    path: datasets/UIT-ViNewsOnSum-dataset/train.json
   dev:
     type: TextSumDataset
-    path: datasets/UIT-Vietnews-dataset/dev.json
+    path: datasets/UIT-ViNewsOnSum-dataset/dev.json
   test: 
     type: TextSumDataset
-    path: datasets/UIT-Vietnews-dataset/test.json
+    path: datasets/UIT-ViNewsOnSum-dataset/test.json
   batch_size: 16
   num_workers: 16
 
 model:
-  name: Pointer_Generator_UIT_VietNews
+  name: Pointer_Generator_UIT-ViNewsOnSum
   architecture: PointerGeneratorModel
   beam_size: 4
   is_eval: False
@@ -32,6 +32,8 @@ model:
   is_coverage: False
   d_model: 128
   hidden_dim: 256
+  pointer_gen: True
+  cov_loss_wt: 1.0
   encoder:
     hidden_dim: 256
     emb_dim: 128
@@ -49,7 +51,7 @@ model:
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.15
+  learning_rate: 0.001
   cov_loss_wt: 1.0
   max_grad_norm: 2.0
   adagrad_init_acc: 0.1

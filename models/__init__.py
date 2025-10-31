@@ -15,3 +15,4 @@ from .hepos.hepos import HeposFairseqBaseline
 from .hat.hat_model import HATModel
 from .seneca.seneca import SENECAModel
 from .longformer.longformer_encoder_decoder import LongformerEncoderDecoderModel
+from .bottom_up.model import BottomUpSummarizer
