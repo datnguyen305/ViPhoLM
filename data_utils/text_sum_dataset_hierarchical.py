@@ -1,60 +1,50 @@
 from torch.utils.data import Dataset
-import json
 import torch
-from torch.nn import functional as F
+import json
 from builders.dataset_builder import META_DATASET
 from utils.instance import Instance
 from vocabs.vocab import Vocab
+from .text_sum_dataset import TextSumDataset
+from vocabs.hierarchicalVocab import HierarchicalVocab
 
 @META_DATASET.register()
-class HierarchicalTextSumDataset(Dataset):
-    def __init__(self, config, vocab: Vocab) -> None:
-        super().__init__()
-        self._data = json.load(open(config.path, encoding='utf-8'))
-        self._keys = list(self._data.keys())
-        self._vocab = vocab
-        self.max_sents = config.max_sents
-        self.max_sent_len = config.max_sent_len
-
-    def __len__(self) -> int:
-        return len(self._data)
+class TextSumDatasetHierarchical(TextSumDataset):
+    def __init__(self, config, vocab: HierarchicalVocab, max_sentences=50, max_words=50) -> None:
+        super().__init__(config, vocab)
+        self.max_sentences = max_sentences  # S
+        self.max_words = max_words          # W
 
     def __getitem__(self, index: int) -> Instance:
         key = self._keys[index]
         item = self._data[key]
-        
-        # Process source paragraphs into sentences
+
+        # Lấy danh sách câu
         paragraphs = item["source"]
-        sentences = []
-        for _, para in paragraphs.items():
-            # Split paragraph into sentences
-            sents = [sent.strip() for sent in " ".join(para).split(".") if sent.strip()]
-            sentences.extend(sents)
-        
-        # Encode sentences
-        encoded_sents = []
-        for sent in sentences[:self.max_sents]:
-            tokens = self._vocab.encode_sentence(sent)
-            # Pad/truncate sentence
-            tokens = tokens[:self.max_sent_len]
-            tokens = F.pad(tokens, (0, self.max_sent_len - len(tokens)), value=self._vocab.pad_idx)
-            encoded_sents.append(tokens)
-        
-        # Pad number of sentences if needed
-        while len(encoded_sents) < self.max_sents:
-            pad_sent = torch.full((self.max_sent_len,), self._vocab.pad_idx)
-            encoded_sents.append(pad_sent)
-            
-        # Stack into tensor [S_s, S_w]
-        source = torch.stack(encoded_sents)
-        
-        # Encode target (remains flat)
-        target = self._vocab.encode_sentence(item["target"])
-        shifted_right_label = target[1:]
+        paragraphs = [" ".join(paragraph) for _, paragraph in paragraphs.items()]
+        target = item["target"]
+
+        # Encode các câu
+        encoded_source = self._vocab.encode_sentences(paragraphs[:self.max_sentences], self.max_words)  # (S, W)
+        sentence_lengths = [min(len(s.split()), self.max_words) for s in paragraphs[:self.max_sentences]]
+
+        # Nếu số câu < max_sentences, pad thêm câu toàn PAD
+        num_pad_sents = self.max_sentences - encoded_source.size(0)
+        if num_pad_sents > 0:
+            pad_sentence = torch.full((self.max_words,), self._vocab.pad_idx, dtype=torch.long)
+            encoded_source = torch.cat([encoded_source, pad_sentence.unsqueeze(0).repeat(num_pad_sents, 1)], dim=0)
+            sentence_lengths.extend([0] * num_pad_sents)
+
+        # Encode target
+        encoded_target = self._vocab.encode_sentence(target)
+        if encoded_target.dim() == 0:
+            encoded_target = encoded_target.unsqueeze(0)  # Chuyển thành tensor 1 chiều
+
+        shifted_right_label = encoded_target[1:]
 
         return Instance(
-            id = key,
-            input_ids = source,        # [S_s, S_w]
-            label = target,            # [T]
-            shifted_right_label = shifted_right_label  # [T-1]
+            id=key,
+            input_ids=encoded_source,          # (S, W)
+            input_lengths=torch.tensor(sentence_lengths),  # số từ thực tế mỗi câu
+            label=encoded_target,
+            shifted_right_label=shifted_right_label
         )

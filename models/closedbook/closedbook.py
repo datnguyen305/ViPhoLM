@@ -157,6 +157,7 @@ class BahdanauAttention(nn.Module): # Attention Bahdanau-style
         C_t = F.bmm(A_ti.unsqueeze(1), encoder_outputs).squeeze(1)  # (B, hidden_size)
         return C_t, A_ti  # context_vector, attention_weights
 
+@META_ARCHITECTURE.register()
 class ClosedBookModel(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super().__init__()
@@ -186,12 +187,6 @@ class ClosedBookModel(nn.Module):
                 - decoder_outputs (torch.Tensor): Output logits of shape (batch_size, tgt_len, vocab_size)
                 - loss (torch.Tensor): Scalar loss value
         """
-        oov_words = []
-        for b in range(src.size(0)):
-            for idx in encoder_input[b]:
-                if idx.item() >= self.vocab.vocab_size and idx.item() not in oov_words:
-                    oov_words.append(idx.item())
-        num_oov_in_batch = len(oov_words)
         # Encode source sequence
         encoder_outputs, hidden_states, encoder_input = self.encoder(src)
 
@@ -200,7 +195,6 @@ class ClosedBookModel(nn.Module):
             for idx in encoder_input[b]:
                 if idx.item() >= self.vocab.vocab_size and idx.item() not in oov_words:
                     oov_words.append(idx.item())
-
         num_oov_in_batch = len(oov_words)
         
         # Initialize decoder input
@@ -232,15 +226,30 @@ class ClosedBookModel(nn.Module):
     def predict(self, src: torch.Tensor) -> torch.Tensor:
         encoder_outputs, encoder_states, encoder_input = self.encoder(src)
         batch_size = encoder_outputs.size(0)
-        decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=encoder_outputs.device).fill_(self.vocab.bos_idx)
+        decoder_input = torch.empty(
+            batch_size, 1, 
+            dtype=torch.long, 
+            device=encoder_outputs.device
+        ).fill_(self.vocab.bos_idx)
         
         decoder_hidden, decoder_memory = encoder_states
         outputs = []
+        
         for _ in range(self.MAX_LENGTH):
-            decoder_output, (decoder_hidden, decoder_memory) = self.decoder.forward_step(decoder_input, (decoder_hidden, decoder_memory), encoder_input)
+            decoder_output, (decoder_hidden, decoder_memory) = self.decoder.forward_step(
+                decoder_input,
+                (decoder_hidden, decoder_memory),
+                encoder_input,
+                encoder_outputs  # Add missing parameter
+            )
             outputs.append(decoder_output)
+            
+            # Early stopping
             top1 = decoder_output.argmax(1)
+            if (top1 == self.vocab.eos_idx).all():
+                break
+                
             decoder_input = top1.unsqueeze(1)
         
-        outputs = torch.stack(outputs, dim=1)  # (batch_size, max_length, vocab_size)
+        outputs = torch.stack(outputs, dim=1)
         return outputs

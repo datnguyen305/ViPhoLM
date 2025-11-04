@@ -5,13 +5,12 @@ from .gru.gru import GRU_Model
 from .AbstractiveTXModel.AbstractiveTXModel import AbstractiveTXModel
 from .pointer_generator.model import PointerGeneratorModel
 from .transformer.model.transformer import TransformerModel
-from .closedbook.closedbook import Closedbook
-from .fast.summ import Seq2SeqSumm
+from .closedbook.closedbook import ClosedBookModel
 from .transformer_hepos.model.transformer_hepos import TransformerHeposModel
 from .transformer_seal.model.transformer_seal import TransformerSealModel
 from .seal_closedbook.seal_closedbook import ClosedbookSeal
 from .fast_seal.copy_sum import CopySummSeal
-from .hepos.hepos import HeposFairseqBaseline
+# from .hepos.hepos import HeposFairseqBaseline
 from .hat.hat_model import HATModel
 from .seneca.seneca import SENECAModel
 from .longformer.longformer_encoder_decoder import LongformerEncoderDecoderModel

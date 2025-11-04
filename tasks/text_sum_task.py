@@ -8,7 +8,6 @@ from builders.dataset_builder import build_dataset
 from tasks.base_task import BaseTask
 from data_utils import collate_fn
 import evaluation
-from models.fast.copy_sum import CopySumm
 
 @META_TASK.register()
 class TextSumTask(BaseTask):
@@ -37,14 +36,14 @@ class TextSumTask(BaseTask):
         )
         self.dev_dataloader = DataLoader(
             dataset=self.dev_dataset,
-            batch_size=1,
+            batch_size=16,
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn
         )
         self.test_dataloader = DataLoader(
             dataset=self.test_dataset,
-            batch_size=1,
+            batch_size=16,
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn
@@ -62,18 +61,10 @@ class TextSumTask(BaseTask):
                 items = items.to(self.device)
                 # forward pass
                 input_ids = items.input_ids
+        
                 labels = items.shifted_right_label
                 
-                # Check if model is CopySumm
-                if isinstance(self.model, CopySumm):
-                    extend_art = input_ids
-                    extend_vsize = len(self.vocab)
-                    _, loss = self.model(input_ids, labels, extend_art=extend_art, extend_vsize=extend_vsize)
-                else:
-                    # THÊM 2 DÒNG NÀY VÀO ĐỂ KIỂM TRA
-                    print("Shape of input_ids BEFORE model:", input_ids.shape)
-                    print("Shape of labels BEFORE model:", labels.shape)
-                    _, loss = self.model(input_ids, labels)
+                _, loss = self.model(input_ids, labels)
                 
                 # backward pass
                 self.optim.zero_grad()
@@ -96,13 +87,7 @@ class TextSumTask(BaseTask):
                 input_ids = items.input_ids
                 label = items.label
                 with torch.no_grad():
-                    # Check if model is CopySumm
-                    if isinstance(self.model, CopySumm):
-                        extend_art = input_ids
-                        extend_vsize = len(self.vocab)
-                        prediction = self.model.predict(input_ids, extend_art=extend_art, extend_vsize=extend_vsize)
-                    else:
-                        prediction = self.model.predict(input_ids)
+                    prediction = self.model.predict(input_ids)
 
                     prediction = self.vocab.decode_sentence(prediction)
                     label = self.vocab.decode_sentence(label)
@@ -143,4 +128,3 @@ class TextSumTask(BaseTask):
         self.logger.info("Test scores %s", scores)
         json.dump(scores, open(os.path.join(self.checkpoint_path, "scores.json"), "w+"), ensure_ascii=False, indent=4)
         json.dump(results, open(os.path.join(self.checkpoint_path, "predictions.json"), "w+"), ensure_ascii=False, indent=4)
-

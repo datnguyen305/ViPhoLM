@@ -7,7 +7,7 @@ from .utils import preprocess_sentence
 
 @META_VOCAB.register()
 class Vocab(object):
-    def __init__(self, config):
+    def __init__(self,  config):
         self.initialize_special_tokens(config)
         self.make_vocab(config)
 
