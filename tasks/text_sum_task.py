@@ -70,9 +70,6 @@ class TextSumTask(BaseTask):
                     extend_vsize = len(self.vocab)
                     _, loss = self.model(input_ids, labels, extend_art=extend_art, extend_vsize=extend_vsize)
                 else:
-                    # THÊM 2 DÒNG NÀY VÀO ĐỂ KIỂM TRA
-                    print("Shape of input_ids BEFORE model:", input_ids.shape)
-                    print("Shape of labels BEFORE model:", labels.shape)
                     _, loss = self.model(input_ids, labels)
                 
                 # backward pass
