@@ -1,4 +1,3 @@
-datasets
 __pycache__
 *.pyc
 *.pth
@@ -10,3 +9,6 @@ __pycache__
 *.log
 *.idea
 *venv
+**tvm/
+**datasets/
+**checkpoints/

@@ -11,6 +11,7 @@ class Encoder(nn.Module):
         self.bidirectional = config.bidirectional
         self.hidden_size = config.hidden_size
         lstm_hidden_size = config.hidden_size // 2 if self.bidirectional else config.hidden_size
+        self.layer_dim = config.layer_dim
 
         self.embedding = nn.Embedding(vocab.vocab_size, config.hidden_size)
         self.lstm = nn.LSTM(
@@ -30,8 +31,10 @@ class Encoder(nn.Module):
         if self.bidirectional:
             # Concatenate the forward and backward states
             h, c = states
+
             h = torch.cat((h[0:h.size(0):2], h[1:h.size(0):2]), dim=-1)
             c = torch.cat((c[0:c.size(0):2], c[1:c.size(0):2]), dim=-1)
+
             states = (h, c)
 
         return output, states
@@ -46,6 +49,7 @@ class Decoder(nn.Module):
         lstm_hidden_size = config.hidden_size // 2 if self.bidirectional else config.hidden_size
 
         self.embedding = nn.Embedding(vocab.vocab_size, config.hidden_size)
+
         self.lstm = nn.LSTM(
             config.hidden_size,
             lstm_hidden_size,
@@ -54,6 +58,7 @@ class Decoder(nn.Module):
             batch_first=True,
             dropout=config.dropout
         )
+
         self.out = nn.Linear(config.hidden_size, vocab.vocab_size)
 
     def forward(self, encoder_outputs: torch.Tensor, encoder_states: torch.Tensor, target_tensor: torch.Tensor):
@@ -63,9 +68,11 @@ class Decoder(nn.Module):
         decoder_hidden, decoder_memory = encoder_states
         decoder_outputs = []
         target_len = target_tensor.shape[-1]
+
         for i in range(target_len):
             decoder_output, (decoder_hidden, decoder_memory) = self.forward_step(decoder_input, (decoder_hidden, decoder_memory))
             decoder_outputs.append(decoder_output)
+            # teacher forcing 
             decoder_input = target_tensor[:, i].unsqueeze(1)
 
         decoder_outputs = torch.cat(decoder_outputs, dim=1)
@@ -89,8 +96,9 @@ class BiLSTM_Model(nn.Module):
 
         self.encoder = Encoder(config.encoder, vocab)
         self.decoder = Decoder(config.decoder, vocab)
+        self.pad_idx = vocab.pad_idx
 
-        self.loss = nn.CrossEntropyLoss()
+        self.loss = nn.CrossEntropyLoss(ignore_index=self.pad_idx)
 
     def forward(self, x: torch.Tensor, labels: torch.Tensor):
         encoder_outs, hidden_states = self.encoder(x)
@@ -98,6 +106,7 @@ class BiLSTM_Model(nn.Module):
         outs, _ = self.decoder(encoder_outs, hidden_states, labels)
 
         loss = self.loss(outs.reshape(-1, self.vocab.vocab_size), labels.reshape(-1))
+
         return outs, loss
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
@@ -116,4 +125,5 @@ class BiLSTM_Model(nn.Module):
                 break
 
         outputs = torch.cat(outputs, dim=1)
+        
         return outputs

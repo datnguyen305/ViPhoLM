@@ -33,6 +33,7 @@ class Encoder(BasicModule):
         config = self.config
         embedded = self.src_word_emb(input)
 
+        seq_lens = seq_lens.cpu()
         packed = pack_padded_sequence(embedded, seq_lens, batch_first=True)
         output, hidden = self.lstm(packed)
 

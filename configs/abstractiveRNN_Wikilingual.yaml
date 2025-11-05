@@ -1,5 +1,7 @@
 vocab:
-  type: VocabWithFeatures
+  type: HierarchicalVocab
+  max_sents: 50
+  max_sent_len: 100
   path:
     train: datasets/Wikilingual-dataset/train.json
     dev: datasets/Wikilingual-dataset/dev.json
@@ -15,41 +17,53 @@ vocab:
   tfidf:
     smooth_idf: true
     sublinear_tf: true
+
 dataset:
   train:
-    type: TextSumDataset
+    type: TextSumDatasetHierarchical
     path: datasets/Wikilingual-dataset/train.json
+    max_sents: 50
+    max_sent_len: 100
   dev:
-    type: TextSumDataset
+    type: TextSumDatasetHierarchical
     path: datasets/Wikilingual-dataset/dev.json
+    max_sents: 50
+    max_sent_len: 100
   test:
-    type: TextSumDataset
+    type: TextSumDatasetHierarchical
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 32
+    max_sents: 50
+    max_sent_len: 100
+  batch_size: 64
   num_workers: 16
+
 model:
-  name: abstractiveRNN_Wikilingual
-  architecture: abstractiveRNN
+  name: AbstractiveTXModel_hierarchical_Wikilingual
+  architecture: AbstractiveTXModel
   hidden_size: 512
   device: cuda
   dropout: 0.5
+  max_sents: 50  # Added missing parameter
+  max_sent_len: 100  # Added missing parameter
   teacher_forcing_ratio: 0.5
   coverage_loss_weight: 0.1
+  pos_dim: 64
+  layer_dim: 1
+  dropout: 0.5
+  pointer_gen: true
+  coverage: true
+  coverage_loss_weight: 0.1
+  teacher_forcing_ratio: 0.5
   encoder:
-    word_emb_dim: 256
-    pos_emb_dim: 64
-    ner_emb_dim: 64
-    tfidf_emb_dim: 32
-    enc_hid_dim: 512
     bidirectional: true
   decoder:
-    dec_emb_dim: 256
-    dec_hid_dim: 512
-    attention_dim: 256
+    bidirectional: false
+
 training:
   checkpoint_path: checkpoints
-  learning_rate: 0.5
+  learning_rate: 0.001
   warmup: 1000
   patience: 5
   score: rouge-L
+
 task: TextSumTask

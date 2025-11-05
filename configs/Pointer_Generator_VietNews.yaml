@@ -32,6 +32,8 @@ model:
   is_coverage: False
   d_model: 128
   hidden_dim: 256
+  pointer_gen: True
+  cov_loss_wt: 1.0
   encoder:
     hidden_dim: 256
     emb_dim: 128
@@ -49,7 +51,7 @@ model:
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.15
+  learning_rate: 0.001
   cov_loss_wt: 1.0
   max_grad_norm: 2.0
   adagrad_init_acc: 0.1

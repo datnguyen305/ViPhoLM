@@ -27,6 +27,7 @@ model:
   name: LongformerEncoderDecoder_Wikilingual
   architecture: LongformerEncoderDecoderModel
   d_model: 768
+  max_len: 512
   label_smoothing: 0.1
   device: cuda
   attention_dilation:

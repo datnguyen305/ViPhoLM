@@ -36,7 +36,7 @@ class Decoder(nn.Module):
             config.hidden_size,
             config.hidden_size,
             bidirectional=config.bidirectional,
-            num_layers=config.layer_dim, 
+            num_layers=config.layer_dim, # 3 lstm 
             batch_first=True, 
             dropout=config.dropout
         )

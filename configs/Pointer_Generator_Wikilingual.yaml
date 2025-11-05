@@ -20,18 +20,20 @@ dataset:
   test: 
     type: TextSumDataset
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 16
+  batch_size: 8
   num_workers: 16
 
 model:
   name: Pointer_Generator_Wikilingual
   architecture: PointerGeneratorModel
-  beam_size: 4
+  beam_size: 2
   is_eval: False
   use_cuda: True
-  is_coverage: False
+  is_coverage: True
   d_model: 128
   hidden_dim: 256
+  pointer_gen: True
+  cov_loss_wt: 1.0
   encoder:
     hidden_dim: 256
     emb_dim: 128
@@ -41,7 +43,7 @@ model:
     hidden_dim: 256
     bidirectional: False
     pointer_gen: True
-    is_coverage: False
+    is_coverage: True
   reduce_state:
     hidden_dim: 256
   label_smoothing: 0.1
@@ -49,7 +51,7 @@ model:
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.15
+  learning_rate: 0.001
   cov_loss_wt: 1.0
   max_grad_norm: 2.0
   adagrad_init_acc: 0.1
