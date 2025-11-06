@@ -43,7 +43,6 @@ class Encoder(nn.Module):
         num_oov_in_batch = max(0, max_src_index - self.vocab.vocab_size + 1)
         return encoder_output, (h_n, c_n), encoder_input, num_oov_in_batch
 
-
 class Decoder(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super().__init__()
@@ -202,6 +201,63 @@ class Decoder(nn.Module):
         final_dist = p_gen * extended_P_vocab + (1 - p_gen) * copy_dist  # (B, extended_vocab_size)
         return final_dist, (h_n, c_n), attention_weights, coverage
 
+class DecoderClosedBook(nn.Module):
+    def __init__(self, config, vocab):
+        super().__init__()
+        self.vocab = vocab
+        self.hidden_size = config.hidden_size
+        
+        self.embedding = None 
+        
+        self.lstm = nn.LSTM(
+            config.hidden_size,
+            config.hidden_size,
+            num_layers=1, 
+            batch_first=True,
+            bidirectional=False, 
+            device=config.device
+        )
+        self.out = nn.Linear(config.hidden_size, vocab.vocab_size)
+        
+        # Các lớp để chiếu state của BiLSTM Encoder
+        self.prj_hidden = nn.Linear(config.hidden_size*2, config.hidden_size, device=config.device)
+        self.prj_memory = nn.Linear(config.hidden_size*2, config.hidden_size, device=config.device)
+
+    def forward(self, states, target_tensor):
+
+        # 1. Chiếu state của Encoder
+        h_n, c_n = states
+        h_n_concat = torch.cat((h_n[0], h_n[1]), dim=-1)
+        c_n_concat = torch.cat((c_n[0], c_n[1]), dim=-1)
+        
+        decoder_h = self.prj_hidden(h_n_concat).unsqueeze(0)
+        decoder_c = self.prj_memory(c_n_concat).unsqueeze(0)
+        decoder_states = (decoder_h, decoder_c)
+
+        # 2. Chuẩn bị input (giống hàm forward PGN)
+        batch_size = target_tensor.size(0)
+        target_len = target_tensor.shape[-1]
+        
+        # Tạo <BOS> token
+        decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=target_tensor.device).fill_(self.vocab.bos_idx)
+        
+        outputs = []
+        for i in range(target_len):
+            # 3. Chạy forward_step đơn giản
+            embedded = self.embedding(decoder_input) # (B, 1, H)
+            output, decoder_states = self.lstm(embedded, decoder_states) # output: (B, 1, H)
+            logits = self.out(output) # (B, 1, VocabSize)
+            
+            outputs.append(logits)
+            
+            # Teacher forcing
+            decoder_input = target_tensor[:, i].unsqueeze(1).clone()
+            
+            # Map OOV về UNK (vì decoder này không hiểu OOV)
+            decoder_input[decoder_input >= self.vocab.vocab_size] = self.vocab.unk_idx
+
+        return torch.cat(outputs, dim=1) # (B, T, VocabSize)
+
 class BahdanauAttention(nn.Module): # Attention Bahdanau-style
     def __init__(self, config):
         super().__init__()
@@ -284,15 +340,18 @@ class ClosedBookModel(nn.Module):
         self.vocab_size = vocab.vocab_size
         
         self.encoder = Encoder(config, vocab)
-        self.decoder = Decoder(config, vocab)
+        self.attn_decoder = Decoder(config, vocab)
+        self.cb_decoder = DecoderClosedBook(config, vocab)
 
+        self.cb_decoder.embedding = self.attn_decoder.embedding
+        self.gamma = config.gamma
         self.d_model = config.d_model
         self.device = config.device 
         self.config = config
         self.vocab = vocab
         self.MAX_LENGTH = vocab.max_sentence_length + 2  # + 2 for bos and eos tokens
-        self.loss = LossFunc(vocab_size=vocab.vocab_size, lambda_cov=config.lambda_coverage)
-
+        self.pgn_loss = LossFunc(vocab_size=vocab.vocab_size, lambda_cov=config.lambda_coverage)
+        self.cb_loss_func = nn.CrossEntropyLoss(ignore_index=0)
     def forward(self, src, labels):
         """
         Forward pass for training
@@ -318,7 +377,7 @@ class ClosedBookModel(nn.Module):
         ).fill_(self.vocab.bos_idx)
         
         # Decode with teacher forcing
-        decoder_outputs, _, attention_weights_list, coverage_list  = self.decoder(
+        pgn_outputs, _, attn_list, cov_list = self.attn_decoder(
             decoder_input,
             hidden_states,
             labels,
@@ -328,14 +387,26 @@ class ClosedBookModel(nn.Module):
         )
 
         # Calculate loss
-        loss, _, _ = self.loss(
-            final_dists = decoder_outputs,
+        loss_pgn, _, _ = self.pgn_loss(
+            final_dists = pgn_outputs,
             target_tensor = labels,
-            attention_dists = attention_weights_list,
-            coverages = coverage_list
+            attention_dists = attn_list,
+            coverages = cov_list
+        )
+
+        cb_outputs = self.cb_decoder(
+            hidden_states,
+            labels
+        ) # Shape: (B, T, VocabSize)
+
+        loss_cb = self.cb_loss_func(
+            cb_outputs.view(-1, self.vocab_size),
+            labels.view(-1)
         )
         
-        return decoder_outputs, loss
+        total_loss = (1 - self.gamma) * loss_pgn + self.gamma * loss_cb
+        return pgn_outputs, total_loss
+    
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         encoder_outputs, hidden_states, encoder_input, num_oov_in_batch = self.encoder(x)
         batch_size = encoder_outputs.size(0)
@@ -354,11 +425,11 @@ class ClosedBookModel(nn.Module):
         c_n_concat = torch.cat((c_n[0], c_n[1]), dim=-1) # (B, H*2)
          
         # 2. Dùng linear layer của DECODER để chiếu về đúng shape (1, B, H)
-        decoder_h = self.decoder.prj_hidden(h_n_concat).unsqueeze(0) # (1, B, H)
-        decoder_c = self.decoder.prj_memory(c_n_concat).unsqueeze(0) # (1, B, H)
+        decoder_h = self.attn_decoder.prj_hidden(h_n_concat).unsqueeze(0) # (1, B, H)
+        decoder_c = self.attn_decoder.prj_memory(c_n_concat).unsqueeze(0) # (1, B, H)
         decoder_states = (decoder_h, decoder_c)
         for _ in range(self.MAX_LENGTH):
-            decoder_output, decoder_states, _, coverage = self.decoder.forward_step(
+            decoder_output, decoder_states, _, coverage = self.attn_decoder.forward_step(
                 decoder_input,
                 decoder_states,
                 encoder_outputs=encoder_outputs,
