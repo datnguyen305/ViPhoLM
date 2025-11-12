@@ -12,14 +12,14 @@ class EncoderHierarchical(nn.Module):
             config.hidden_size,
             config.hidden_size,
             bidirectional=True,
-            num_layers=1,
+            num_layers=config.num_layers,
             batch_first=True
         )
         self.lstm_sent = nn.LSTM(
             config.hidden_size*2,
             config.hidden_size,
             bidirectional=True,
-            num_layers=1,
+            num_layers=config.num_layers,          
             batch_first=True
         )
         self.dropout = nn.Dropout(config.dropout)
