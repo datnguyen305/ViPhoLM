@@ -21,48 +21,57 @@ dataset:
   test: 
     type: TextSumDataset
     path: datasets/VietNews-dataset/test.json
-  batch_size: 32
-  num_workers: 8
+  batch_size: 4
+  num_workers: 2
 
 # Cấu hình cho Model
 model:
-  type: SENECAModel # Phải khớp với tên class đã đăng ký trong @META_ARCHITECTURE.register()
+  name: Seneca_VietNews       # Tên checkpoint để dễ nhận biết
+  architecture: SENECAModel # Phải khớp với tên class đã đăng ký trong @META_ARCHITECTURE.register()
+  d_model: 1024
   # Chứa các cấu hình con dành riêng cho Seneca
   SENECA:
     EXTRACTOR:
-      EMB_DIM: 256
-      CONV_HIDDEN: 128
+      EMB_DIM: 128
+      CONV_HIDDEN: 100
       LSTM_HIDDEN: 256
-      LSTM_LAYER: 2
-      BIDIRECTIONAL: True
-      N_HOP: 1          # Số lần Glimpse/Hop trong Pointer Network
-      DROPOUT: 0.2
+      LSTM_LAYER: 1
+      BIDIRECTIONAL: true
+      N_HOP: 1
+      DROPOUT: 0.3
+    
+    # SENECA Generator config
     GENERATOR:
-      EMB_DIM: 256
-      N_HIDDEN: 512     # Kích thước ẩn của LSTM Encoder/Decoder trong Generator
-      BIDIRECTIONAL: True # Cho Encoder
-      N_LAYER: 2
-      DROPOUT: 0.2
+      EMB_DIM: 128
+      N_HIDDEN: 256
+      BIDIRECTIONAL: true
+      N_LAYER: 1
+      DROPOUT: 0.3
+  
+  # Inference config
+  INFERENCE:
+    TOP_K: 4  # extract top-4 sentences
+    MAX_LEN: 120
+    BEAM_SIZE: 4
+    MIN_LEN: 10
+    DIVERSE: 1.0
+  device: cpu
 
 # Cấu hình cho quá trình Huấn luyện
 training:
   batch_size: 16
-  lr: 0.0001
+  learning_rate: 0.0001
   # Trọng số cho loss của Extractor và Generator trong giai đoạn supervised
   extractor_loss_weight: 0.5 
   generator_loss_weight: 0.5
+  checkpoint_path: "checkpoints"
+  epochs: 20
   # Cấu hình cho giai đoạn Reinforcement Learning (RL)
   rl_lr: 0.00001
   rl_weight: 0.995      # Thường trọng số này rất cao
-  checkpoint_path: "checkpoints/seneca"
-  warmup_steps: 1000
+  warmup: 1000
   patience: 5
   grad_clip: 2.0        # Thêm gradient clipping để huấn luyện ổn định
-
-# Cấu hình cho quá trình Suy luận (Inference)
-inference:
-  beam_size: 4
-  max_len: 150          # Độ dài tối đa của tóm tắt được sinh ra
-  min_len: 30           # Độ dài tối thiểu
+  score: rouge-L
 
 task: TextSumTask

@@ -37,14 +37,14 @@ model:
     layer_dim: 3
     input_dim: 512
     hidden_size: 512
-    bidirectional: True
+    bidirectional: False
     dropout: 0.1
   label_smoothing: 0.1
   device: cuda
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.5
+  learning_rate: 0.0001
   warmup: 1000
   patience: 5
   score: rouge-L

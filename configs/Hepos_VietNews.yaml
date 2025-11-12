@@ -26,7 +26,7 @@ dataset:
 
 model:
   name: HEPOS_Baseline_VietNews      # Tên checkpoint để dễ nhận biết
-  architecture: HeposFairseqBaseline # Tên lớp wrapper đã đăng ký với META_ARCHITECTURE
+  architecture: HEPOSBaselineSummarizer # Tên lớp wrapper đã đăng ký với META_ARCHITECTURE
   d_model: 1024                     # Kích thước embedding (BART-large dùng 1024)
   num_heads: 16                     # Số lượng attention heads (BART-large dùng 16)
   num_encoder_layers: 12            # Số lớp Encoder (BART-large dùng 12)
@@ -46,7 +46,7 @@ training:
   patience: 5
   score: rouge-L
   batch_size: 32
-  lr: 1e-4
+  learning_rate: 0.0001
   epochs: 20
 
 task: TextSumTask
