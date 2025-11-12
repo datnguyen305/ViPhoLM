@@ -36,14 +36,14 @@ class TextSumTask(BaseTask):
         )
         self.dev_dataloader = DataLoader(
             dataset=self.dev_dataset,
-            batch_size=16,
+            batch_size=1,
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn
         )
         self.test_dataloader = DataLoader(
             dataset=self.test_dataset,
-            batch_size=16,
+            batch_size=1,
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn

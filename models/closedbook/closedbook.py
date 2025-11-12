@@ -15,7 +15,7 @@ class Encoder(nn.Module):
             config.hidden_size,
             config.hidden_size,
             bidirectional=True,
-            num_layers=1,
+            num_layers=config.num_layers,
             batch_first=True,
             device=config.device
         )
@@ -54,7 +54,7 @@ class Decoder(nn.Module):
         self.lstm = nn.LSTM(
             config.hidden_size,
             config.hidden_size,
-            num_layers=1,
+            num_layers=config.num_layers,
             batch_first=True,
             dropout=0.7,
             device=config.device,
@@ -114,11 +114,22 @@ class Decoder(nn.Module):
             c_n: (num_layers, batch_size, hidden_size)
         """
         #Initial states
-        decoder_hidden, decoder_memory = states
-        decoder_hidden = torch.cat((decoder_hidden[0], decoder_hidden[1]), dim=-1) # (batch_size, hidden_size*2)
-        decoder_memory = torch.cat((decoder_memory[0], decoder_memory[1]), dim=-1) # (batch_size, hidden_size*2)
-        decoder_hidden = self.prj_hidden(decoder_hidden).unsqueeze(0)  # (1, batch_size, hidden_size)
-        decoder_memory = self.prj_memory(decoder_memory).unsqueeze(0)  # (1, batch_size, hidden_size)
+        decoder_hidden, decoder_memory = states # Shape (num_layers * 2, B, H)
+        num_layers = self.lstm.num_layers
+        batch_size = decoder_hidden.size(1)
+        hidden_size = decoder_hidden.size(2)
+
+        # Reshape to (num_layers, 2, B, H)
+        h_n_reshaped = decoder_hidden.view(num_layers, 2, batch_size, hidden_size)
+        c_n_reshaped = decoder_memory.view(num_layers, 2, batch_size, hidden_size)
+
+        # Concatenate forward (0) and backward (1) directions: (num_layers, B, H*2)
+        h_n_concat = torch.cat((h_n_reshaped[:, 0, :, :], h_n_reshaped[:, 1, :, :]), dim=-1)
+        c_n_concat = torch.cat((c_n_reshaped[:, 0, :, :], c_n_reshaped[:, 1, :, :]), dim=-1)
+
+        # Project down to (num_layers, B, H)
+        decoder_hidden = self.prj_hidden(h_n_concat)
+        decoder_memory = self.prj_memory(c_n_concat)
 
         decoder_outputs = []
         target_len = target_tensor.shape[-1]
@@ -212,7 +223,7 @@ class DecoderClosedBook(nn.Module):
         self.lstm = nn.LSTM(
             config.hidden_size,
             config.hidden_size,
-            num_layers=1, 
+            num_layers=config.num_layers, 
             batch_first=True,
             bidirectional=False, 
             device=config.device
@@ -226,12 +237,22 @@ class DecoderClosedBook(nn.Module):
     def forward(self, states, target_tensor):
 
         # 1. Chiếu state của Encoder
-        h_n, c_n = states
-        h_n_concat = torch.cat((h_n[0], h_n[1]), dim=-1)
-        c_n_concat = torch.cat((c_n[0], c_n[1]), dim=-1)
-        
-        decoder_h = self.prj_hidden(h_n_concat).unsqueeze(0)
-        decoder_c = self.prj_memory(c_n_concat).unsqueeze(0)
+        h_n, c_n = states # Shape (num_layers * 2, B, H)
+        num_layers = self.lstm.num_layers
+        batch_size = h_n.size(1)
+        hidden_size = h_n.size(2)
+
+        # Reshape to (num_layers, 2, B, H)
+        h_n_reshaped = h_n.view(num_layers, 2, batch_size, hidden_size)
+        c_n_reshaped = c_n.view(num_layers, 2, batch_size, hidden_size)
+
+        # Concatenate forward (0) and backward (1) directions: (num_layers, B, H*2)
+        h_n_concat = torch.cat((h_n_reshaped[:, 0, :, :], h_n_reshaped[:, 1, :, :]), dim=-1)
+        c_n_concat = torch.cat((c_n_reshaped[:, 0, :, :], c_n_reshaped[:, 1, :, :]), dim=-1)
+
+        # Project down to (num_layers, B, H)
+        decoder_h = self.prj_hidden(h_n_concat)
+        decoder_c = self.prj_memory(c_n_concat)
         decoder_states = (decoder_h, decoder_c)
 
         # 2. Chuẩn bị input (giống hàm forward PGN)
@@ -292,11 +313,11 @@ class BahdanauAttention(nn.Module): # Attention Bahdanau-style
         return C_t, A_ti, coverage  # context_vector (B, H), attention_weights (B, S), coverage (B, S)
 
 class LossFunc(nn.Module):
-    def __init__(self, vocab_size, lambda_cov=1.0):
+    def __init__(self, vocab_size, lambda_cov=1.0, pad_idx=0):
         super().__init__()
         self.lambda_cov = lambda_cov
         self.vocab_size = vocab_size
-        self.loss = nn.NLLLoss(ignore_index=0, reduction='mean')  # giả sử 0 là padding
+        self.loss = nn.NLLLoss(ignore_index=pad_idx, reduction='mean')  # giả sử 0 là padding
 
     def forward(self, final_dists, target_tensor, attention_dists, coverages):
         """
@@ -321,9 +342,14 @@ class LossFunc(nn.Module):
             nll_t = self.loss(log_probs, target_tensor[:, t])  # (B,)
             nll_loss_total += nll_t
 
-            # Coverage loss: ∑ min(a_ti, c_ti)
+            # Coverage loss:
             if attn_t is not None and cov_t is not None:
-                cov_t_loss = torch.mean(torch.sum(torch.min(attn_t, cov_t), dim=1))
+                # LẤY COVERAGE TRƯỚC KHI CỘNG BƯỚC HIỆN TẠI
+                # cov_t bao gồm attn_t, nên ta phải trừ nó ra
+                cov_t_minus_1 = cov_t - attn_t 
+                
+                # CHỈ TÍNH MIN VỚI COVERAGE TRƯỚC ĐÓ
+                cov_t_loss = torch.mean(torch.sum(torch.min(attn_t, cov_t_minus_1), dim=1))
                 cov_loss_total += cov_t_loss
 
         nll_loss_total /= seq_len
@@ -350,8 +376,8 @@ class ClosedBookModel(nn.Module):
         self.config = config
         self.vocab = vocab
         self.MAX_LENGTH = vocab.max_sentence_length + 2  # + 2 for bos and eos tokens
-        self.pgn_loss = LossFunc(vocab_size=vocab.vocab_size, lambda_cov=config.lambda_coverage)
-        self.cb_loss_func = nn.CrossEntropyLoss(ignore_index=0)
+        self.pgn_loss = LossFunc(vocab_size=vocab.vocab_size, pad_idx=vocab.pad_idx, lambda_cov=config.lambda_coverage)
+        self.cb_loss_func = nn.CrossEntropyLoss(ignore_index=vocab.pad_idx)
     def forward(self, src, labels):
         """
         Forward pass for training
@@ -418,16 +444,23 @@ class ClosedBookModel(nn.Module):
         ).fill_(self.vocab.bos_idx)
         outputs = []
         coverage = None
-        h_n, c_n = hidden_states 
-        
-        # 1. Ghép 2 chiều (forward/backward) của BiLSTM
-        h_n_concat = torch.cat((h_n[0], h_n[1]), dim=-1) # (B, H*2)
-        c_n_concat = torch.cat((c_n[0], c_n[1]), dim=-1) # (B, H*2)
-         
-        # 2. Dùng linear layer của DECODER để chiếu về đúng shape (1, B, H)
-        decoder_h = self.attn_decoder.prj_hidden(h_n_concat).unsqueeze(0) # (1, B, H)
-        decoder_c = self.attn_decoder.prj_memory(c_n_concat).unsqueeze(0) # (1, B, H)
-        decoder_states = (decoder_h, decoder_c)
+        h_n, c_n = hidden_states # Shape (num_layers * 2, B, H)
+        num_layers = self.attn_decoder.lstm.num_layers
+        batch_size = h_n.size(1)
+        hidden_size = h_n.size(2)
+
+        # 1. Reshape to (num_layers, 2, B, H)
+        h_n_reshaped = h_n.view(num_layers, 2, batch_size, hidden_size)
+        c_n_reshaped = c_n.view(num_layers, 2, batch_size, hidden_size)
+
+        # 2. Concatenate forward (0) and backward (1) directions: (num_layers, B, H*2)
+        h_n_concat = torch.cat((h_n_reshaped[:, 0, :, :], h_n_reshaped[:, 1, :, :]), dim=-1)
+        c_n_concat = torch.cat((c_n_reshaped[:, 0, :, :], c_n_reshaped[:, 1, :, :]), dim=-1)
+
+        # 3. Project down to (num_layers, B, H)
+        decoder_h = self.attn_decoder.prj_hidden(h_n_concat)
+        decoder_c = self.attn_decoder.prj_memory(c_n_concat)
+        decoder_states = (decoder_h, decoder_c) # Shape (num_layers, B, H)
         for _ in range(self.MAX_LENGTH):
             decoder_output, decoder_states, _, coverage = self.attn_decoder.forward_step(
                 decoder_input,
@@ -449,7 +482,7 @@ class ClosedBookModel(nn.Module):
             decoder_input[decoder_input >= self.vocab.vocab_size] = self.vocab.unk_idx
             decoder_input = decoder_input.unsqueeze(1) # Shape (B, 1)
 
-            if (top_idx == self.vocab.eos_idx).all():
+            if decoder_input.item() == self.vocab.eos_idx:
                 break
         outputs = torch.cat(outputs, dim=1)
 
