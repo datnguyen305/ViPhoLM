@@ -75,7 +75,7 @@ class TextSumTask(BaseTask):
                 # update the training status
                 pbar.set_postfix(loss=running_loss / (it + 1))
                 pbar.update()
-                # self.scheduler.step()
+                self.scheduler.step()
 
     def evaluate_metrics(self, dataloader: DataLoader) -> dict:
         self.model.eval()
