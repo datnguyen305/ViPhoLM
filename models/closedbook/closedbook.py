@@ -128,7 +128,7 @@ class Decoder(nn.Module):
             decoder_output, (decoder_hidden, decoder_memory), attention_weights, coverage = self.forward_step(
                 decoder_input, 
                 (decoder_hidden, decoder_memory),
-                encoder_output=encoder_outputs,
+                encoder_outputs=encoder_outputs,
                 encoder_input=encoder_input,
                 coverage=coverage,
                 num_oov_in_batch=num_oov_in_batch
@@ -140,10 +140,12 @@ class Decoder(nn.Module):
             decoder_input = target_tensor[:, i].unsqueeze(1) # Teacher forcing
 
         decoder_outputs = torch.stack(decoder_outputs, dim=1) # (batch_size, target_len, extended_vocab_size)
+        attention_weights_list = torch.stack(attention_weights_list, dim=1) # Shape (B, T, S)
+        coverages_list = torch.stack(coverages_list, dim=1) # Shape (B, T, S)
         return decoder_outputs, (decoder_hidden, decoder_memory), attention_weights_list, coverages_list
 
 
-    def forward_step(self, input, states, encoder_output, num_oov_in_batch=0, encoder_input=None, coverage=None):
+    def forward_step(self, input, states, encoder_outputs, num_oov_in_batch=0, encoder_input=None, coverage=None):
         embedded = self.embedding(input) 
         # embedded: (batch_size, 1, hidden_size)
 
@@ -160,7 +162,7 @@ class Decoder(nn.Module):
         
         s_t = self.reduce_state(s_t)  # (B, H*2) - Đưa về H*2 # <<< THAY ĐỔI 9
 
-        C_t, A_ti, coverage = self.attn(s_t = s_t, h_i = encoder_output, coverage=coverage) 
+        C_t, A_ti, coverage = self.attn(s_t = s_t, h_i = encoder_outputs, coverage=coverage) 
         # C_t: (B, H*2)
         # A_ti: (B, S)
 
@@ -334,36 +336,68 @@ class LossFunc(nn.Module):
         super().__init__()
         self.lambda_cov = lambda_cov
         self.vocab_size = vocab_size
-        self.NLloss = nn.NLLLoss()  # giả sử 0 là padding
+        self.NLloss = nn.NLLLoss(ignore_index=pad_idx)
 
     def forward(self, final_dists, target_tensor, attention_dists, coverages):
         """
-        final_dists: list of tensors (B, T, extended_vocab_size)
+        final_dists: (B, T, extended_vocab_size)
         target_tensor: (B, T)
-        attention_dists: list of tensors (B, S)
-        coverages: list of tensors (B, S)
+        attention_dists: list of (B, S) - (đã stack)
+        coverages: list of (B, S) - (đã stack)
         """
-        batch_size, max_len = target_tensor.size()
-        loss = 0.0
+        # final_dists có shape (B, T, V_ext)
+        # target_tensor có shape (B, T)
 
-        for t in range(max_len):
-            final_dist = final_dists[:, t, :]  # (B, extended_vocab_size)
-            target = target_tensor[:, t]  # (B,)
+        # 1. Tính NLL Loss (vector-hóa)
+        log_probs = torch.log(final_dists + 1e-12)
 
-            # Negative log likelihood loss
-            log_probs = torch.log(final_dist + 1e-12)  # Thêm epsilon để tránh log(0)
-            nll_loss = self.NLloss(log_probs, target)
-            loss += nll_loss
+        # Reshape (B, T, V_ext) -> (B*T, V_ext)
+        log_probs_flat = log_probs.view(-1, log_probs.size(-1))
+        
+        # Reshape (B, T) -> (B*T)
+        target_flat = target_tensor.view(-1)
+        
+        # NLLLoss sẽ tự động bỏ qua các target == pad_idx
+        nll_loss = self.NLloss(log_probs_flat, target_flat)
+        
+        loss = nll_loss
 
-            # Coverage loss
-            if self.lambda_cov > 0:
-                attention_dist = attention_dists[t]  # (B, S)
-                coverage = coverages[t]  # (B, S)
-                cov_loss = torch.sum(torch.min(attention_dist, coverage), dim=1)  # (B,)
-                cov_loss = torch.mean(cov_loss)  # Trung bình trên batch
-                loss += self.lambda_cov * cov_loss
+        # 2. Tính Coverage Loss (vector-hóa)
+        if self.lambda_cov > 0:
+            # Ghép list các attention/coverage lại thành tensor
+            # (Giả định attn_list và cov_list là list, nếu nó đã là tensor thì bỏ qua)
+            # Yêu cầu: Decoder.forward phải return:
+            # torch.stack(attention_weights_list, dim=1) -> (B, T, S)
+            # torch.stack(coverages_list, dim=1) -> (B, T, S)
+            
+            # Ở đây tôi giả định bạn đã sửa Decoder.forward để trả về
+            # attn_list_stacked (B, T, S) và cov_list_stacked (B, T, S)
+            
+            # Lấy tensor (B, T, S)
+            attention_dists_stacked = attention_dists 
+            coverages_stacked = coverages
+            
+            # (B, T, S)
+            cov_loss_all_steps = torch.min(attention_dists_stacked, coverages_stacked)
+            
+            # (B*T, S)
+            cov_loss_flat = cov_loss_all_steps.view(-1, cov_loss_all_steps.size(-1))
+            
+            # Tạo mask cho padding (B*T,)
+            # True nếu KHÔNG PHẢI pad, False nếu LÀ pad
+            padding_mask = (target_flat != self.NLloss.ignore_index)
+            
+            # Chỉ tính cov_loss cho các token không phải padding
+            # (B*T, S) -> (B*T,) -> (số_token_ko_pad,)
+            cov_loss = torch.sum(cov_loss_flat[padding_mask], dim=1)
+            
+            # Lấy trung bình
+            cov_loss = torch.mean(cov_loss)
+            
+            loss += self.lambda_cov * cov_loss
 
-        loss = loss / max_len  # Trung bình trên độ dài chuỗi
+        # Bạn không cần chia cho max_len nữa vì NLLLoss (với reduction='mean')
+        # và torch.mean đã tự động lấy trung bình rồi.
         return loss, None, None
         
 @META_ARCHITECTURE.register()
@@ -457,7 +491,7 @@ class ClosedBookModel(nn.Module):
             decoder_output, decoder_states, _, coverage = self.attn_decoder.forward_step(
                 decoder_input,
                 decoder_states,
-                encoder_output=encoder_outputs,
+                encoder_outputs=encoder_outputs,
                 num_oov_in_batch=num_oov_in_batch,
                 encoder_input=encoder_input,
                 coverage=coverage
