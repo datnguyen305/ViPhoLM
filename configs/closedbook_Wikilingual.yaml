@@ -21,8 +21,8 @@ dataset:
   test:
     type: TextSumDataset
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 16
-  num_workers: 4
+  batch_size: 32
+  num_workers: 16
 
 model:
   name: closedbook_Wikilingual
@@ -31,18 +31,15 @@ model:
   hidden_size: 256
   checkpoint: checkpoints/closedbook_model.pt
   encoder:
-    hidden_size: 256
     dropout: 0.7
     num_layers: 1
     bidirectional: true
   decoder:
-    hidden_size: 256
     dropout: 0.7
     num_layers: 1
     bidirectional: false
   pointer_gen: true  # Sử dụng cơ chế Pointer-Generator
   is_coverage: true  # Sử dụng Coverage Loss
-  batch_size: 32
   max_enc_steps: 400
   max_dec_steps: 100
   beam_size: 4
