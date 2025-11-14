@@ -457,7 +457,7 @@ class ClosedBookModel(nn.Module):
             decoder_output, decoder_states, _, coverage = self.attn_decoder.forward_step(
                 decoder_input,
                 decoder_states,
-                encoder_outputs=encoder_outputs,
+                encoder_output=encoder_outputs,
                 num_oov_in_batch=num_oov_in_batch,
                 encoder_input=encoder_input,
                 coverage=coverage
