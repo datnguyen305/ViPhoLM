@@ -451,7 +451,7 @@ class ClosedBookModel(nn.Module):
             device=x.device
         ).fill_(self.vocab.bos_idx)
         outputs = []
-        coverage = None
+        coverage = torch.zeros(encoder_outputs.size(0), encoder_outputs.size(1), device=encoder_outputs.device)
         decoder_states = hidden_states
         for _ in range(self.MAX_LENGTH):
             decoder_output, decoder_states, _, coverage = self.attn_decoder.forward_step(
