@@ -307,6 +307,7 @@ class BahdanauAttention(nn.Module): # Attention Bahdanau-style
         super().__init__()
         self.W_h = nn.Linear(config.hidden_size*2, config.hidden_size)
         self.W_s = nn.Linear(config.hidden_size*2, config.hidden_size)
+        self.W_c = nn.Linear(1, config.hidden_size, bias=False)
         self.v_a = nn.Linear(config.hidden_size, 1, bias=True)
 
     def forward(self, s_t, h_i, coverage): 
@@ -322,8 +323,8 @@ class BahdanauAttention(nn.Module): # Attention Bahdanau-style
         """
         Wi_hi = self.W_h(h_i)  # (B, S, hidden_size)
         Ws_s = self.W_s(s_t)  # (B, hidden_size)
-
-        E_ti = self.v_a(torch.tanh(Wi_hi + Ws_s.unsqueeze(1) + coverage.unsqueeze(2))).squeeze(-1)  # (B, S)
+        coverage_features = self.W_c(coverage.unsqueeze(2)) # (B, S, 1) -> (B, S, hidden_size)
+        E_ti = self.v_a(torch.tanh(Wi_hi + Ws_s.unsqueeze(1) + coverage_features)).squeeze(-1)  # (B, S)
         A_ti = F.softmax(E_ti, dim=-1) # (B, S)
         C_t = torch.bmm(A_ti.unsqueeze(1), h_i).squeeze(1)  # (B, 1, S) * (B, S, H) -> (B, 1, H) -> (B, H*2)
 
@@ -399,6 +400,36 @@ class LossFunc(nn.Module):
         # Bạn không cần chia cho max_len nữa vì NLLLoss (với reduction='mean')
         # và torch.mean đã tự động lấy trung bình rồi.
         return loss, None, None
+
+class BeamHypothesis(object):
+    """ Class để lưu trữ một giả thuyết (beam) trong Beam Search """
+    def __init__(self, tokens, score, state, coverage):
+        self.tokens = tokens      # list: các token ID
+        self.score = score        # float: log probability tích lũy
+        self.state = state        # tuple: (h_n, c_n) của LSTM, shape (L, H*2)
+        self.coverage = coverage  # tensor: vector coverage từ PGN, shape (S,)
+    
+    def extend(self, token_id, token_score, new_state, new_coverage):
+        """ Tạo ra một giả thuyết mới từ giả thuyết hiện tại """
+        return BeamHypothesis(
+            tokens = self.tokens + [token_id],
+            score = self.score + token_score, # Cộng log-prob
+            state = new_state,
+            coverage = new_coverage
+        )
+
+    @property
+    def latest_token(self):
+        """ Lấy token cuối cùng của chuỗi """
+        return self.tokens[-1]
+    
+    @property
+    def avg_score(self):
+        """ Tính điểm trung bình (để chuẩn hóa độ dài) """
+        if len(self.tokens) == 0:
+            return -float('inf')
+        # Chuẩn hóa độ dài (length penalty)
+        return self.score / len(self.tokens)
         
 @META_ARCHITECTURE.register()
 class ClosedBookModel(nn.Module):
@@ -475,41 +506,145 @@ class ClosedBookModel(nn.Module):
         total_loss = (1 - self.gamma) * loss_pgn + self.gamma * loss_cb
         return pgn_outputs, total_loss
     
-    def predict(self, x: torch.Tensor) -> torch.Tensor:
-        encoder_outputs, hidden_states, encoder_input, num_oov_in_batch = self.encoder(x)
-        batch_size = encoder_outputs.size(0)
+    def predict(self, x: torch.Tensor, beam_size: int = 4) -> torch.Tensor:
+        """
+        Dự đoán bằng Beam Search (Tìm kiếm chùm).
         
-        decoder_input = torch.empty(
-            batch_size, 1,
-            dtype=torch.long,
-            device=x.device
-        ).fill_(self.vocab.bos_idx)
-        outputs = []
-        coverage = torch.zeros(encoder_outputs.size(0), encoder_outputs.size(1), device=encoder_outputs.device)
-        decoder_states = hidden_states
+        *** PHIÊN BẢN TỐI ƯU HÓA CHO BATCH_SIZE = 1 ***
+        
+        Args:
+            x (torch.Tensor): Input batch (B=1, S)
+            beam_size (int): Số lượng beam (k). 
+                             Giá trị 4 hoặc 5 thường là tốt.
+        Returns:
+            torch.Tensor: Chuỗi token ID dự đoán (1, T)
+        """
+        # 0. Kiểm tra batch size (để đảm bảo)
+        if x.size(0) != 1:
+            raise ValueError("Hàm predict này chỉ hỗ trợ batch_size = 1.")
+
+        k = beam_size
+
+        # 1. CHẠY ENCODER MỘT LẦN
+        encoder_outputs, hidden_states, encoder_input, num_oov_in_batch = self.encoder(x)
+        # encoder_outputs: (1, S, H*2)
+        # hidden_states: (L, 1, H*2)
+        # encoder_input: (1, S)
+        
+        # 2. KHỞI TẠO k BEAMS BAN ĐẦU
+        initial_h, initial_c = hidden_states
+        
+        # .squeeze(1) để bỏ dim B=1
+        initial_state = (initial_h.squeeze(1), initial_c.squeeze(1)) # Shape: (L, H*2)
+        initial_coverage = torch.zeros_like(encoder_input.squeeze(0), dtype=torch.float) # Shape: (S,)
+        
+        # Tạo k beam ban đầu giống hệt nhau
+        beams = [BeamHypothesis(
+            tokens=[self.vocab.bos_idx],
+            score=0.0,
+            state=initial_state,
+            coverage=initial_coverage
+        ) for _ in range(k)]
+        
+        results = [] # List để lưu các beam đã hoàn thành (gặp EOS)
+        
+        # 3. VÒNG LẶP BEAM SEARCH
         for _ in range(self.MAX_LENGTH):
-            decoder_output, decoder_states, _, coverage = self.attn_decoder.forward_step(
+            if not beams: # Nếu không còn beam nào để phát triển
+                break
+            
+            # --- Chuẩn bị "batch" (kích thước k) cho Decoder ---
+            latest_tokens = [b.latest_token for b in beams]
+            # Xử lý token OOV (nếu token trước đó là OOV, map về UNK)
+            latest_tokens_safe = [t if t < self.vocab.vocab_size else self.vocab.unk_idx for t in latest_tokens]
+            
+            k_batch_size = len(beams) # Số beam hiện tại (có thể < k)
+            
+            # Tạo batch input (k, 1)
+            decoder_input = torch.tensor(latest_tokens_safe, dtype=torch.long, device=x.device).unsqueeze(1)
+            
+            # Tạo batch states (L, k, H*2) và coverage (k, S)
+            all_h = torch.stack([b.state[0] for b in beams], dim=1)
+            all_c = torch.stack([b.state[1] for b in beams], dim=1)
+            decoder_states = (all_h, all_c)
+            coverage = torch.stack([b.coverage for b in beams], dim=0)
+
+            # Mở rộng (repeat) encoder outputs cho k beams
+            # (1, S, H*2) -> (k, S, H*2)
+            encoder_outputs_ex = encoder_outputs.repeat(k_batch_size, 1, 1)
+            encoder_input_ex = encoder_input.repeat(k_batch_size, 1)
+
+            # 4. CHẠY DECODER 1 BƯỚC (với batch_size = k)
+            final_dist, decoder_states_new, _, coverage_new = self.attn_decoder.forward_step(
                 decoder_input,
                 decoder_states,
-                encoder_outputs=encoder_outputs,
+                encoder_outputs=encoder_outputs_ex,
                 num_oov_in_batch=num_oov_in_batch,
-                encoder_input=encoder_input,
+                encoder_input=encoder_input_ex,
                 coverage=coverage
             )
+            # final_dist: (k, V_ext)
+            # decoder_states_new: (L, k, H*2)
+            # coverage_new: (k, S)
+
+            log_probs = torch.log(final_dist + 1e-12)
+
+            # Lấy 2*k từ tốt nhất TỔNG THỂ
+            topk_scores, topk_ids = torch.topk(log_probs, k * 2, dim=-1)
+            # topk_scores/ids: (k, 2*k)
+
+            all_new_beams = [] # List tạm để chứa các giả thuyết mới
             
-            top_idx = decoder_output.argmax(dim=-1) # Shape (B,)
-            # 2. Lưu token này vào danh sách output
-            # (Phải unsqueeze để (B,) -> (B, 1) rồi mới cat ở cuối)
-            outputs.append(top_idx.unsqueeze(1)) 
+            # 5. MỞ RỘNG VÀ CẮT TỈA (Extend & Prune)
+            for beam_idx in range(k_batch_size):
+                beam = beams[beam_idx] # Lấy beam cũ
+                
+                # Lặp qua 2*k token mới tốt nhất của beam này
+                for j in range(k * 2):
+                    token_id = topk_ids[beam_idx, j].item()
+                    token_score = topk_scores[beam_idx, j].item()
+                    
+                    # Lấy state và coverage cho beam mới này
+                    new_state = (
+                        decoder_states_new[0][:, beam_idx, :], # Shape: (L, H*2)
+                        decoder_states_new[1][:, beam_idx, :]  # Shape: (L, H*2)
+                    )
+                    new_coverage = coverage_new[beam_idx, :] # Shape: (S,)
+                    
+                    # Tạo beam mới
+                    new_beam = beam.extend(token_id, token_score, new_state, new_coverage)
+                    all_new_beams.append(new_beam)
 
-            # 3. Chuẩn bị input cho bước tiếp theo
-            decoder_input = top_idx.clone()
-            # Map OOV (>= vocab_size) về UNK (để không crash embedding)
-            decoder_input[decoder_input >= self.vocab.vocab_size] = self.vocab.unk_idx
-            decoder_input = decoder_input.unsqueeze(1) # Shape (B, 1)
-
-            if decoder_input.item() == self.vocab.eos_idx:
-                break
-        outputs = torch.cat(outputs, dim=1)
-
-        return outputs
+            # Sắp xếp tất cả các giả thuyết mới (lên tới k * 2k giả thuyết)
+            all_new_beams.sort(key=lambda b: b.avg_score, reverse=True)
+            
+            # Cắt tỉa: Chỉ giữ lại k beam tốt nhất
+            beams = [] # Reset list beam cho vòng lặp sau
+            for b in all_new_beams:
+                if b.latest_token == self.vocab.eos_idx:
+                    # Nếu gặp EOS, beam này hoàn thành
+                    results.append(b)
+                else:
+                    # Nếu chưa, giữ nó lại cho vòng lặp sau
+                    beams.append(b)
+                
+                # Dừng nếu đã đủ k beam (cho vòng lặp sau)
+                # Hoặc đã đủ k kết quả (để kết thúc sớm)
+                if len(beams) == k or len(results) == k:
+                    break
+        
+        # --- Hết vòng lặp for (hết MAX_LENGTH) ---
+        
+        if not results: # Nếu không có beam nào gặp EOS
+            results = beams # Dùng beam tốt nhất hiện tại
+            
+        results.sort(key=lambda b: b.avg_score, reverse=True)
+        best_beam = results[0]
+        
+        # 6. Xử lý [BOS] và trả về kết quả
+        tokens = best_beam.tokens
+        if tokens[0] == self.vocab.bos_idx:
+            tokens = tokens[1:]
+        
+        # Trả về tensor (1, T) để giống output của hàm predict cũ
+        return torch.tensor([tokens], dtype=torch.long, device=x.device)
