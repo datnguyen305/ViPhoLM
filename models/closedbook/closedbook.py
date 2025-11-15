@@ -356,69 +356,50 @@ class LossFunc(nn.Module):
         super().__init__()
         self.lambda_cov = lambda_cov
         self.vocab_size = vocab_size
-        self.NLloss = nn.NLLLoss(ignore_index=pad_idx)
+        self.NLloss = nn.NLLLoss(ignore_index=pad_idx, reduction='mean') # Sửa: dùng 'mean'
+        self.pad_idx = pad_idx # Lưu pad_idx
 
     def forward(self, final_dists, target_tensor, attention_dists, coverages):
-        """
-        final_dists: (B, T, extended_vocab_size)
-        target_tensor: (B, T)
-        attention_dists: list of (B, S) - (đã stack)
-        coverages: list of (B, S) - (đã stack)
-        """
-        # final_dists có shape (B, T, V_ext)
-        # target_tensor có shape (B, T)
-
-        # 1. Tính NLL Loss (vector-hóa)
         log_probs = torch.log(final_dists + 1e-12)
-
-        # Reshape (B, T, V_ext) -> (B*T, V_ext)
         log_probs_flat = log_probs.view(-1, log_probs.size(-1))
-        
-        # Reshape (B, T) -> (B*T)
         target_flat = target_tensor.view(-1)
         
-        # NLLLoss sẽ tự động bỏ qua các target == pad_idx
         nll_loss = self.NLloss(log_probs_flat, target_flat)
-        
         loss = nll_loss
 
-        # 2. Tính Coverage Loss (vector-hóa)
         if self.lambda_cov > 0:
-            # Ghép list các attention/coverage lại thành tensor
-            # (Giả định attn_list và cov_list là list, nếu nó đã là tensor thì bỏ qua)
-            # Yêu cầu: Decoder.forward phải return:
-            # torch.stack(attention_weights_list, dim=1) -> (B, T, S)
-            # torch.stack(coverages_list, dim=1) -> (B, T, S)
+            attention_dists_stacked = attention_dists # (B, T, S)
+            coverages_stacked = coverages             # (B, T, S)
             
-            # Ở đây tôi giả định bạn đã sửa Decoder.forward để trả về
-            # attn_list_stacked (B, T, S) và cov_list_stacked (B, T, S)
-            
-            # Lấy tensor (B, T, S)
-            attention_dists_stacked = attention_dists 
-            coverages_stacked = coverages
-            
-            # (B, T, S)
-            cov_loss_all_steps = torch.min(attention_dists_stacked, coverages_stacked)
-            
-            # (B*T, S)
+            # --- (SỬA LỖI LOGIC 3: COVERAGE LOSS) ---
+            # c_{t-1} = c_t - a_t
+            # (Giả sử c_{-1} là 0)
+            # Tạo c_{t-1} bằng cách dịch chuyển c_t
+            B, T, S = coverages_stacked.size()
+            # c_0 = 0 (B, 1, S)
+            c_prev_0 = torch.zeros(B, 1, S, device=coverages_stacked.device)
+            # c_{t-1} (B, T-1, S)
+            c_prev_t_minus_1 = coverages_stacked[:, :-1, :]
+            # Ghép lại -> (B, T, S)
+            coverages_prev = torch.cat([c_prev_0, c_prev_t_minus_1], dim=1)
+
+            # Tính min(a_t, c_{t-1})
+            cov_loss_all_steps = torch.min(attention_dists_stacked, coverages_prev)
+            # --- (HẾT SỬA LỖI 3) ---
+
             cov_loss_flat = cov_loss_all_steps.view(-1, cov_loss_all_steps.size(-1))
             
-            # Tạo mask cho padding (B*T,)
-            # True nếu KHÔNG PHẢI pad, False nếu LÀ pad
-            padding_mask = (target_flat != self.NLloss.ignore_index)
+            padding_mask = (target_flat != self.pad_idx)
             
-            # Chỉ tính cov_loss cho các token không phải padding
-            # (B*T, S) -> (B*T,) -> (số_token_ko_pad,)
-            cov_loss = torch.sum(cov_loss_flat[padding_mask], dim=1)
+            cov_loss_per_token = torch.sum(cov_loss_flat[padding_mask], dim=1)
             
             # Lấy trung bình
-            cov_loss = torch.mean(cov_loss)
+            cov_loss = torch.mean(cov_loss_per_token)
             
             loss += self.lambda_cov * cov_loss
 
-        # Bạn không cần chia cho max_len nữa vì NLLLoss (với reduction='mean')
-        # và torch.mean đã tự động lấy trung bình rồi.
-        return loss, None, None
+        # Trả về loss (total), nll_loss, và coverage_loss
+        return loss, nll_loss, (loss - nll_loss)
         
 @META_ARCHITECTURE.register()
 class ClosedBookModel(nn.Module):
@@ -441,22 +422,8 @@ class ClosedBookModel(nn.Module):
         self.pgn_loss = LossFunc(vocab_size=vocab.vocab_size, pad_idx=vocab.pad_idx, lambda_cov=config.lambda_coverage)
         self.cb_loss_func = nn.CrossEntropyLoss(ignore_index=vocab.pad_idx)
     def forward(self, src, labels):
-        """
-        Forward pass for training
-        
-        Args:
-            src (torch.Tensor): Source sequences of shape (batch_size, src_len)
-            labels (torch.Tensor): Target sequences of shape (batch_size, tgt_len)
-            
-        Returns:
-            tuple:
-                - decoder_outputs (torch.Tensor): Output logits of shape (batch_size, tgt_len, vocab_size)
-                - loss (torch.Tensor): Scalar loss value
-        """
-        # Encode source sequence
         encoder_outputs, hidden_states, encoder_input, num_oov_in_batch = self.encoder(src)
         
-        # Initialize decoder input
         batch_size = src.size(0)
         decoder_input = torch.empty(
             batch_size, 1,
@@ -464,36 +431,37 @@ class ClosedBookModel(nn.Module):
             device=src.device
         ).fill_(self.vocab.bos_idx)
         
-        # Decode with teacher forcing
         pgn_outputs, _, attn_list, cov_list = self.attn_decoder(
             decoder_input,
             hidden_states,
-            labels,
+            labels, 
             encoder_outputs=encoder_outputs,
             num_oov_in_batch=num_oov_in_batch,
             encoder_input=encoder_input
         )
 
-        # Calculate loss
         loss_pgn, _, _ = self.pgn_loss(
             final_dists = pgn_outputs,
-            target_tensor = labels,
+            target_tensor = labels, 
             attention_dists = attn_list,
             coverages = cov_list
         )
 
         cb_outputs = self.cb_decoder(
             hidden_states,
-            labels
+            labels 
         ) # Shape: (B, T, VocabSize)
 
-        cb_labels = labels.clone() # Tạo bản sao
-        cb_labels[cb_labels >= self.vocab_size] = self.vocab.pad_idx # Map OOV về PAD
+        # --- (SỬA LỖI LOGIC 4: CB LOSS) ---
+        cb_labels = labels.clone() 
+        # Map OOV về UNK (để model học cách dự đoán <unk>)
+        cb_labels[cb_labels >= self.vocab_size] = self.vocab.unk_idx 
         
         loss_cb = self.cb_loss_func(
             cb_outputs.view(-1, self.vocab_size),
-            cb_labels.view(-1) # <--- Dùng bản sao an toàn
+            cb_labels.view(-1) # <--- Dùng bản sao an toàn (đã map về UNK)
         )
+        # --- (HẾT SỬA LỖI 4) ---
         
         total_loss = (1 - self.gamma) * loss_pgn + self.gamma * loss_cb
         return pgn_outputs, total_loss
