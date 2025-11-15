@@ -5,6 +5,7 @@ from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
 
 class Encoder(nn.Module):
+    
     def __init__(self, config, vocab, shared_embedding):
         super().__init__()
         self.embedding = shared_embedding
@@ -23,7 +24,17 @@ class Encoder(nn.Module):
         )
 
     def forward(self, input):
-        embedded = self.embedding(input) 
+        # 1. 'encoder_input' là tensor GỐC, chứa OOV indices (>= vocab_size)
+        #    Nó sẽ được dùng cho PGN scatter_add ở Decoder.
+        encoder_input = input 
+        
+        # 2. Tạo 'embedding_input', một bản sao an toàn cho lớp embedding.
+        #    Tất cả OOV indices (>= vocab_size) được map về UNK_ID.
+        embedding_input = input.clone()
+        embedding_input[embedding_input >= self.vocab.vocab_size] = self.vocab.unk_idx
+        
+        # 3. Chỉ đưa bản an toàn vào embedding.
+        embedded = self.embedding(embedding_input) # <--- ĐÃ AN TOÀN
         encoder_output, (h_n, c_n) = self.lstm(embedded)
         encoder_input = input
         # encoder_output: (batch_size, seq_len, hidden_size*2)
@@ -146,7 +157,13 @@ class Decoder(nn.Module):
 
 
     def forward_step(self, input, states, encoder_outputs, num_oov_in_batch=0, encoder_input=None, coverage=None):
-        embedded = self.embedding(input) 
+        embedding_input = input.clone()
+        embedding_input[embedding_input >= self.vocab.vocab_size] = self.vocab.unk_idx
+        
+        # 2. Đưa bản an toàn vào embedding
+        embedded = self.embedding(embedding_input) # <--- ĐÃ AN TOÀN
+        # ----------------------------------------------------
+        
         # embedded: (batch_size, 1, hidden_size)
 
         output, (h_n, c_n) = self.lstm(embedded, states)
