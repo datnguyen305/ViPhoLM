@@ -487,9 +487,12 @@ class ClosedBookModel(nn.Module):
             labels
         ) # Shape: (B, T, VocabSize)
 
+        cb_labels = labels.clone() # Tạo bản sao
+        cb_labels[cb_labels >= self.vocab_size] = self.vocab.pad_idx # Map OOV về PAD
+        
         loss_cb = self.cb_loss_func(
             cb_outputs.view(-1, self.vocab_size),
-            labels.view(-1)
+            cb_labels.view(-1) # <--- Dùng bản sao an toàn
         )
         
         total_loss = (1 - self.gamma) * loss_pgn + self.gamma * loss_cb
