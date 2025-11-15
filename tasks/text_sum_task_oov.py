@@ -58,7 +58,7 @@ class TextSumTaskOOV(BaseTask):
         running_loss = .0
         with tqdm(desc='Epoch %d - Training' % (self.epoch+1), unit='it', total=len(self.train_dataloader)) as pbar:
             for it, items in enumerate(self.train_dataloader):
-                input_ids = items.src.to(self.device)
+                input_ids = items.input_ids.to(self.device)
                 labels = items.shifted_right_label.to(self.device)
                 
                 _, loss = self.model(input_ids, labels)
