@@ -301,9 +301,11 @@ class DecoderClosedBook(nn.Module):
             logits: (B, vocab_size)
             (h_n, c_n): Trạng thái mới - Shape (1, B, H*2)
         """
-        # 1. Embedding input
-        # input: (B, 1) -> embedded: (B, 1, H)
-        embedded = self.embedding(input) 
+        embedding_input = input.clone()
+        embedding_input[embedding_input >= self.vocab.vocab_size] = self.vocab.unk_idx
+        
+        # 2. Đưa bản an toàn vào embedding
+        embedded = self.embedding(embedding_input) # <--- ĐÃ AN TOÀN
 
         # 2. Đưa qua LSTM
         # output: (B, 1, H*2)
