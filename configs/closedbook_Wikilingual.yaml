@@ -27,12 +27,11 @@ dataset:
 model:
   name: closedbook_Wikilingual
   architecture: ClosedBookModel
-  num_layers: 6
   hidden_size: 256
   checkpoint: checkpoints/closedbook_model.pt
   encoder:
     dropout: 0.7
-    num_layers: 1
+    num_layers: 2
     bidirectional: true
   decoder:
     dropout: 0.7

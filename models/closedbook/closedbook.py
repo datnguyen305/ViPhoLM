@@ -14,7 +14,7 @@ class Encoder(nn.Module):
             config.hidden_size,
             config.hidden_size,
             bidirectional=True,
-            num_layers=config.num_layers,
+            num_layers=config.encoder.num_layers,
             batch_first=True,
             device=config.device
         )
@@ -72,7 +72,7 @@ class Decoder(nn.Module):
         self.lstm = nn.LSTM(
             config.hidden_size,
             config.hidden_size*2,
-            num_layers=config.num_layers,
+            num_layers=config.decoder.num_layers,
             batch_first=True,
             dropout=0.5,
             device=config.device,
@@ -230,7 +230,7 @@ class DecoderClosedBook(nn.Module):
             config.hidden_size * 2,
             # QUAN TRỌNG: Đặt num_layers=1 để khớp với state (1, B, H*2)
             # mà Encoder.forward của bạn trả về.
-            num_layers=config.num_layers, 
+            num_layers=config.decoder.num_layers, 
             batch_first=True,
             device=config.device,
             bidirectional=False # Yêu cầu chính: Unidirectional
