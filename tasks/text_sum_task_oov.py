@@ -80,14 +80,10 @@ class TextSumTaskOOV(BaseTask):
                 
                 # Cập nhật running loss
                 running_loss += total_loss.item()
-                running_nll_loss += nll_loss.item()
-                running_cov_loss += cov_loss.item()
 
                 # update the training status
                 pbar.set_postfix(
                     loss=running_loss / (it + 1),
-                    nll=running_nll_loss / (it + 1), # Loss sinh từ
-                    cov=running_cov_loss / (it + 1)  # Loss chống lặp
                 )
                 pbar.update()
                 self.scheduler.step()
