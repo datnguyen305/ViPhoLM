@@ -57,15 +57,10 @@ class Encoder(nn.Module):
         # Nối 2_directions lại: (B, H*2)
         c_n_combined = torch.cat((c_n_fwd, c_n_bwd), dim=1)
 
-        # Dùng linear layer (đã khai báo ở __init__) để giảm chiều từ H*2 -> H
-        # (B, H*2) -> (B, H)
-        h_n_reduced = self.linear(h_n_combined)
-        c_n_reduced = self.linear(c_n_combined)
-
         # Decoder của bạn (theo lỗi) chỉ có 1 layer,
         # nên chúng ta cần thêm 1 chiều ở đầu (num_layers=1)
-        h_n_final = h_n_reduced.unsqueeze(0) # Shape: (1, B, H)
-        c_n_final = c_n_reduced.unsqueeze(0) # Shape: (1, B, H)
+        h_n_final = h_n_combined.unsqueeze(0) # Shape: (1, B, H*2)
+        c_n_final = c_n_combined.unsqueeze(0) # Shape: (1, B, H*2)
         
         states = (h_n_final, c_n_final) # <--- Shape (1, B, H)
         # --- KẾT THÚC SỬA MỚI ---
