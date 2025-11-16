@@ -389,21 +389,31 @@ class LossFunc(nn.Module):
 
             # Tính min(a_t, c_{t-1})
             cov_loss_all_steps = torch.min(attention_dists_stacked, coverages_prev)
-            # --- (HẾT SỬA LỖI 3) ---
+            # 1. Tạo mask padding
+            # target_flat có shape (B*T,)
+            # Chúng ta muốn mask cho cov_loss_all_steps (B, T, S)
+            # -> mask phải có shape (B, T)
+            padding_mask = (target_tensor != self.pad_idx) # Shape (B, T)
 
-            cov_loss_flat = cov_loss_all_steps.view(-1, cov_loss_all_steps.size(-1))
-            
-            padding_mask = (target_flat != self.pad_idx)
-            
-            cov_loss_per_token = torch.sum(cov_loss_flat[padding_mask], dim=1)
-            
-            # Lấy trung bình
-            cov_loss = torch.mean(cov_loss_per_token)
+            # 2. Sum loss trên chiều source (S)
+            cov_loss_per_step = torch.sum(cov_loss_all_steps, dim=2) # Shape (B, T)
+
+            # 3. Áp dụng padding mask
+            cov_loss_per_step_masked = cov_loss_per_step * padding_mask.float()
+
+            # 4. Tính loss trung bình (chính xác)
+            # Sum toàn bộ loss và chia cho số token không phải pad
+            num_non_pad_tokens = padding_mask.sum()
+            if num_non_pad_tokens > 0:
+                cov_loss = torch.sum(cov_loss_per_step_masked) / num_non_pad_tokens
+            else:
+                cov_loss = torch.tensor(0.0, device=final_dists.device)
             
             loss += self.lambda_cov * cov_loss
+            # --- (HẾT PHẦN SỬA LẠI) ---
 
         # Trả về loss (total), nll_loss, và coverage_loss
-        return loss, nll_loss, (loss - nll_loss)
+        return loss, nll_loss, (loss - nll_loss) # (cov_loss bây giờ được tính trong 'loss')
     
 
 BeamHypothesis = namedtuple("BeamHypothesis", 
@@ -470,7 +480,7 @@ class ClosedBookModel(nn.Module):
             cb_labels.view(-1)
         )
         
-        total_loss = (1 - self.gamma) * loss_pgn + self.gamma * loss_cb
+        total_loss = (1 - self.gamma) * nll_loss + self.gamma * loss_cb
         
         # --- (THAY ĐỔI 2): Trả về 4 giá trị ---
         return pgn_outputs, total_loss, nll_loss, cov_loss
