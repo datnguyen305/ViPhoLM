@@ -20,7 +20,7 @@ dataset:
   test: 
     type: TextSumDataset
     path: datasets/Vietnews-dataset/test.json
-  batch_size: 128
+  batch_size: 32
   num_workers: 8
 
 model:
@@ -66,7 +66,7 @@ model:
   initializer_range: 0.02
   intermediate_size: 3072
   layer_norm_eps: 1e-05
-  max_position_embeddings: 4098
+  max_position_embeddings: 124000
   num_attention_heads: 12
   num_hidden_layers: 12
   num_labels: 2
@@ -76,11 +76,10 @@ model:
   torchscript: false
   type_vocab_size: 1
   use_bfloat16: false
-  vocab_size: 50265
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.00003  
+  learning_rate: 0.0001
   warmup: 500
   patience: 5
   score: rouge-L

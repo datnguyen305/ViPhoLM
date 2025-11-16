@@ -8,7 +8,7 @@ from models.transformer.layers.position_wise_feed_forward import PositionwiseFee
 class EncoderLayer(nn.Module):
 
     def __init__(self, d_model, ffn_hidden, n_head, drop_prob):
-        super(EncoderLayer, self).__init__()
+        super(EncoderLayer, self).__init__() 
         self.attention = MultiHeadAttention(d_model=d_model, n_head=n_head)
         self.norm1 = LayerNorm(d_model=d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
