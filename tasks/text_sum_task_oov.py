@@ -66,7 +66,7 @@ class TextSumTaskOOV(BaseTask):
                 labels = items.shifted_right_label.to(self.device)
                 
                 # Lấy tất cả 4 giá trị loss từ model
-                _, total_loss, nll_loss, cov_loss = self.model(input_ids, labels)
+                _, total_loss = self.model(input_ids, labels)
                 
                 # backward pass
                 self.optim.zero_grad()
