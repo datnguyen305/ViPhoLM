@@ -20,14 +20,13 @@ dataset:
   test: 
     type: TextSumDataset
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 128
+  batch_size: 32
   num_workers: 8
 
 model:
   name: LongformerEncoderDecoder_Wikilingual
   architecture: LongformerEncoderDecoderModel
   d_model: 768
-  max_len: 512
   label_smoothing: 0.1
   device: cuda
   attention_dilation:
@@ -67,7 +66,7 @@ model:
   initializer_range: 0.02
   intermediate_size: 3072
   layer_norm_eps: 1e-05
-  max_position_embeddings: 4098
+  max_position_embeddings: 4800
   num_attention_heads: 12
   num_hidden_layers: 12
   num_labels: 2
@@ -77,7 +76,6 @@ model:
   torchscript: false
   type_vocab_size: 1
   use_bfloat16: false
-  vocab_size: 50265
 
 training:
   checkpoint_path: "checkpoints"

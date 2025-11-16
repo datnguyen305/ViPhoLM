@@ -1,3 +1,4 @@
+# encoder module
 from torch import nn
 
 from models.transformer.blocks.encoder_layer import EncoderLayer
