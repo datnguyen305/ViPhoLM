@@ -24,41 +24,51 @@ class Encoder(nn.Module):
         )
 
     def forward(self, input):
-        # 1. 'encoder_input' là tensor GỐC, chứa OOV indices (>= vocab_size)
-        #    Nó sẽ được dùng cho PGN scatter_add ở Decoder.
+        # 1. 'encoder_input' là tensor GỐC, chứa OOV indices
         encoder_input = input 
         
-        # 2. Tạo 'embedding_input', một bản sao an toàn cho lớp embedding.
-        #    Tất cả OOV indices (>= vocab_size) được map về UNK_ID.
+        # 2. Tạo 'embedding_input', một bản sao an toàn cho lớp embedding
         embedding_input = input.clone()
         embedding_input[embedding_input >= self.vocab.vocab_size] = self.vocab.unk_idx
         
-        # 3. Chỉ đưa bản an toàn vào embedding.
-        embedded = self.embedding(embedding_input) # <--- ĐÃ AN TOÀN
+        # 3. Đưa bản an toàn vào embedding
+        embedded = self.embedding(embedding_input) 
         encoder_output, (h_n, c_n) = self.lstm(embedded)
-        encoder_input = input
-        # encoder_output: (batch_size, seq_len, hidden_size*2)
-        # h_n: (2*num_layers, batch_size, hidden_size)
-        # c_n: (2*num_layers, batch_size, hidden_size)
+        
+        # encoder_output: (B, seq_len, H*2)
+        # h_n, c_n: (num_layers * 2, B, H) -> (4, B, H)
 
-        # --- BẮT ĐẦU SỬA ---
-        # Reshape để tách layer và direction
-        # (2*num_layers, B, H) -> (num_layers, 2, B, H)
-        num_layers = self.lstm.num_layers
-        hidden_size = self.lstm.hidden_size
+        # Mục tiêu: Tạo state (h_n, c_n) với shape (1, B, H) 
+        # cho Decoder (vốn có num_layers=1)
+        
+        # Lấy hidden state của layer CUỐI CÙNG (layer 2)
+        # Forward: index -2 (Layer 2 Fwd)
+        # Backward: index -1 (Layer 2 Bwd)
+        h_n_fwd = h_n[-2, :, :] # Shape: (B, H)
+        h_n_bwd = h_n[-1, :, :] # Shape: (B, H)
+        
+        # Nối 2_directions lại: (B, H*2)
+        h_n_combined = torch.cat((h_n_fwd, h_n_bwd), dim=1)
+        
+        # Lấy cell state của layer CUỐI CÙNG (tương tự h_n)
+        c_n_fwd = c_n[-2, :, :] # Shape: (B, H)
+        c_n_bwd = c_n[-1, :, :] # Shape: (B, H)
+        
+        # Nối 2_directions lại: (B, H*2)
+        c_n_combined = torch.cat((c_n_fwd, c_n_bwd), dim=1)
 
-        h_n = h_n.view(num_layers, 2, -1, hidden_size)
-        c_n = c_n.view(num_layers, 2, -1, hidden_size)
+        # Dùng linear layer (đã khai báo ở __init__) để giảm chiều từ H*2 -> H
+        # (B, H*2) -> (B, H)
+        h_n_reduced = self.linear(h_n_combined)
+        c_n_reduced = self.linear(c_n_combined)
 
-        # Gộp 2 direction (forward và backward)
-        # (num_layers, 2, B, H) -> (num_layers, B, H*2)
-        h_n = torch.cat((h_n[:, 0, :, :], h_n[:, 1, :, :]), dim=2)
-        c_n = torch.cat((c_n[:, 0, :, :], c_n[:, 1, :, :]), dim=2)
-
-        # h_n và c_n bây giờ có shape (num_layers, B, H*2)
-        # Sẵn sàng để đưa vào PGN Decoder
-        states = (h_n, c_n)
-        # --- KẾT THÚC SỬA ---
+        # Decoder của bạn (theo lỗi) chỉ có 1 layer,
+        # nên chúng ta cần thêm 1 chiều ở đầu (num_layers=1)
+        h_n_final = h_n_reduced.unsqueeze(0) # Shape: (1, B, H)
+        c_n_final = c_n_reduced.unsqueeze(0) # Shape: (1, B, H)
+        
+        states = (h_n_final, c_n_final) # <--- Shape (1, B, H)
+        # --- KẾT THÚC SỬA MỚI ---
 
         max_src_index = input.max().item()
         num_oov_in_batch = max(0, max_src_index - self.vocab.vocab_size + 1)
