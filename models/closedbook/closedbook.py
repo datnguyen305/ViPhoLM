@@ -475,7 +475,9 @@ class ClosedBookModel(nn.Module):
         # --- (THAY ĐỔI 2): Trả về 4 giá trị ---
         return pgn_outputs, total_loss, nll_loss, cov_loss
     
-    def predict(self, x: torch.Tensor, beam_size: int = 4) -> torch.Tensor:
+    def predict(self, x: torch.Tensor, beam_size: int = None) -> torch.Tensor:
+        if beam_size is None:
+            beam_size = self.config.beam_size
         """
         Hàm predict đã được viết lại, sử dụng Beam Search.
         Hàm này chỉ hỗ trợ batch_size = 1.
