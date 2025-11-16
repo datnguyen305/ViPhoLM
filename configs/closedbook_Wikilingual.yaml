@@ -21,14 +21,15 @@ dataset:
   test:
     type: TextSumDatasetOOV
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 32
-  num_workers: 16
+  batch_size: 16
+  num_workers: 4
 
 model:
   name: closedbook_Wikilingual
   architecture: ClosedBookModel
   hidden_size: 256
   checkpoint: checkpoints/closedbook_model.pt
+  num_layers: 2
   encoder:
     dropout: 0.7
     num_layers: 2
