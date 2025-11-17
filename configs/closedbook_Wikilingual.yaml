@@ -29,10 +29,10 @@ model:
   architecture: ClosedBookModel
   hidden_size: 256
   checkpoint: checkpoints/closedbook_model.pt
-  num_layers: 2
+  num_layers: 1
   encoder:
     dropout: 0.7
-    num_layers: 2
+    num_layers: 1
     bidirectional: true
   decoder:
     dropout: 0.7
