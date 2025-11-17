@@ -178,7 +178,7 @@ class Decoder(nn.Module):
         # Lấy state của lớp cuối cùng (không cần gộp fwd/bwd)
         h_last = h_n[-1] # (B, H*2)                      # <<< THAY ĐỔI 6
         c_last = c_n[-1] # (B, H*2)                      # <<< THAY ĐỔI 7
-        
+
         s_t = h_last  # Sử dụng h_last làm s_t cho attention
 
         C_t, A_ti, coverage = self.attn(s_t = s_t, h_i = encoder_outputs, coverage=coverage) 
@@ -481,7 +481,7 @@ class ClosedBookModel(nn.Module):
         total_loss = (1 - self.gamma) * loss_pgn + self.gamma * loss_cb
         
         # --- (THAY ĐỔI 2): Trả về 4 giá trị ---
-        return pgn_outputs, total_loss, nll_loss, cov_loss
+        return pgn_outputs, total_loss
     
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """
