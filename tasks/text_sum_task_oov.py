@@ -66,6 +66,7 @@ class TextSumTaskOOV(BaseTask):
                 # backward pass
                 self.optim.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 2.0)
                 self.optim.step()
                 running_loss += loss.item()
 
