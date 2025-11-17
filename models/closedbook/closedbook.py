@@ -3,7 +3,7 @@ from torch.nn import functional as F
 import torch.nn as nn
 from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
-from collections import namedtuple
+
 class Encoder(nn.Module):
     
     def __init__(self, config, vocab, shared_embedding):
@@ -14,7 +14,7 @@ class Encoder(nn.Module):
             config.hidden_size,
             config.hidden_size,
             bidirectional=True,
-            num_layers=config.encoder.num_layers,
+            num_layers=config.num_layers,
             batch_first=True,
             device=config.device
         )
@@ -24,45 +24,41 @@ class Encoder(nn.Module):
         )
 
     def forward(self, input):
-        # 1. 'encoder_input' là tensor GỐC, chứa OOV indices
+        # 1. 'encoder_input' là tensor GỐC, chứa OOV indices (>= vocab_size)
+        #    Nó sẽ được dùng cho PGN scatter_add ở Decoder.
         encoder_input = input 
         
-        # 2. Tạo 'embedding_input', một bản sao an toàn cho lớp embedding
+        # 2. Tạo 'embedding_input', một bản sao an toàn cho lớp embedding.
+        #    Tất cả OOV indices (>= vocab_size) được map về UNK_ID.
         embedding_input = input.clone()
         embedding_input[embedding_input >= self.vocab.vocab_size] = self.vocab.unk_idx
         
-        # 3. Đưa bản an toàn vào embedding
-        embedded = self.embedding(embedding_input) 
+        # 3. Chỉ đưa bản an toàn vào embedding.
+        embedded = self.embedding(embedding_input) # <--- ĐÃ AN TOÀN
         encoder_output, (h_n, c_n) = self.lstm(embedded)
-        
-        # encoder_output: (B, seq_len, H*2)
-        # h_n, c_n: (num_layers * 2, B, H) -> (4, B, H)
+        encoder_input = input
+        # encoder_output: (batch_size, seq_len, hidden_size*2)
+        # h_n: (2*num_layers, batch_size, hidden_size)
+        # c_n: (2*num_layers, batch_size, hidden_size)
 
-        # Mục tiêu: Tạo state (h_n, c_n) với shape (1, B, H) 
-        # cho Decoder (vốn có num_layers=1)
-        
-        # Lấy hidden state của layer CUỐI CÙNG (layer 2)
-        # Forward: index -2 (Layer 2 Fwd)
-        # Backward: index -1 (Layer 2 Bwd)
-        h_n_fwd = h_n[-2, :, :] # Shape: (B, H)
-        h_n_bwd = h_n[-1, :, :] # Shape: (B, H)
-        
-        # Nối 2_directions lại: (B, H*2)
-        h_n_combined = torch.cat((h_n_fwd, h_n_bwd), dim=1)
-        
-        # Lấy cell state của layer CUỐI CÙNG (tương tự h_n)
-        c_n_fwd = c_n[-2, :, :] # Shape: (B, H)
-        c_n_bwd = c_n[-1, :, :] # Shape: (B, H)
-        
-        # Nối 2_directions lại: (B, H*2)
-        c_n_combined = torch.cat((c_n_fwd, c_n_bwd), dim=1)
+        # --- BẮT ĐẦU SỬA ---
+        # Reshape để tách layer và direction
+        # (2*num_layers, B, H) -> (num_layers, 2, B, H)
+        num_layers = self.lstm.num_layers
+        hidden_size = self.lstm.hidden_size
 
-        # Decoder của bạn (theo lỗi) chỉ có 1 layer,
-        # nên chúng ta cần thêm 1 chiều ở đầu (num_layers=1)
-        h_n_final = h_n_combined.unsqueeze(0) # Shape: (1, B, H*2)
-        c_n_final = c_n_combined.unsqueeze(0) # Shape: (1, B, H*2)
-        
-        states = (h_n_final, c_n_final) # <--- Shape (1, B, H)
+        h_n = h_n.view(num_layers, 2, -1, hidden_size)
+        c_n = c_n.view(num_layers, 2, -1, hidden_size)
+
+        # Gộp 2 direction (forward và backward)
+        # (num_layers, 2, B, H) -> (num_layers, B, H*2)
+        h_n = torch.cat((h_n[:, 0, :, :], h_n[:, 1, :, :]), dim=2)
+        c_n = torch.cat((c_n[:, 0, :, :], c_n[:, 1, :, :]), dim=2)
+
+        # h_n và c_n bây giờ có shape (num_layers, B, H*2)
+        # Sẵn sàng để đưa vào PGN Decoder
+        states = (h_n, c_n)
+        # --- KẾT THÚC SỬA ---
 
         max_src_index = input.max().item()
         num_oov_in_batch = max(0, max_src_index - self.vocab.vocab_size + 1)
@@ -76,7 +72,7 @@ class Decoder(nn.Module):
         self.lstm = nn.LSTM(
             config.hidden_size,
             config.hidden_size*2,
-            num_layers=config.decoder.num_layers,
+            num_layers=config.num_layers,
             batch_first=True,
             dropout=0.5,
             device=config.device,
@@ -179,7 +175,9 @@ class Decoder(nn.Module):
         h_last = h_n[-1] # (B, H*2)                      # <<< THAY ĐỔI 6
         c_last = c_n[-1] # (B, H*2)                      # <<< THAY ĐỔI 7
 
-        s_t = h_last  # Sử dụng h_last làm s_t cho attention
+        s_t = torch.cat((h_last, c_last), dim=-1) # (B, H*4) # <<< THAY ĐỔI 8
+        
+        s_t = self.reduce_state(s_t)  # (B, H*2) - Đưa về H*2 # <<< THAY ĐỔI 9
 
         C_t, A_ti, coverage = self.attn(s_t = s_t, h_i = encoder_outputs, coverage=coverage) 
         # C_t: (B, H*2)
@@ -232,7 +230,7 @@ class DecoderClosedBook(nn.Module):
             config.hidden_size * 2,
             # QUAN TRỌNG: Đặt num_layers=1 để khớp với state (1, B, H*2)
             # mà Encoder.forward của bạn trả về.
-            num_layers=config.decoder.num_layers, 
+            num_layers=config.num_layers, 
             batch_first=True,
             device=config.device,
             bidirectional=False # Yêu cầu chính: Unidirectional
@@ -387,37 +385,22 @@ class LossFunc(nn.Module):
 
             # Tính min(a_t, c_{t-1})
             cov_loss_all_steps = torch.min(attention_dists_stacked, coverages_prev)
-            # 1. Tạo mask padding
-            # target_flat có shape (B*T,)
-            # Chúng ta muốn mask cho cov_loss_all_steps (B, T, S)
-            # -> mask phải có shape (B, T)
-            padding_mask = (target_tensor != self.pad_idx) # Shape (B, T)
+            # --- (HẾT SỬA LỖI 3) ---
 
-            # 2. Sum loss trên chiều source (S)
-            cov_loss_per_step = torch.sum(cov_loss_all_steps, dim=2) # Shape (B, T)
-
-            # 3. Áp dụng padding mask
-            cov_loss_per_step_masked = cov_loss_per_step * padding_mask.float()
-
-            # 4. Tính loss trung bình (chính xác)
-            # Sum toàn bộ loss và chia cho số token không phải pad
-            num_non_pad_tokens = padding_mask.sum()
-            if num_non_pad_tokens > 0:
-                cov_loss = torch.sum(cov_loss_per_step_masked) / num_non_pad_tokens
-            else:
-                cov_loss = torch.tensor(0.0, device=final_dists.device)
+            cov_loss_flat = cov_loss_all_steps.view(-1, cov_loss_all_steps.size(-1))
+            
+            padding_mask = (target_flat != self.pad_idx)
+            
+            cov_loss_per_token = torch.sum(cov_loss_flat[padding_mask], dim=1)
+            
+            # Lấy trung bình
+            cov_loss = torch.mean(cov_loss_per_token)
             
             loss += self.lambda_cov * cov_loss
-            # --- (HẾT PHẦN SỬA LẠI) ---
 
         # Trả về loss (total), nll_loss, và coverage_loss
-        return loss, nll_loss, (loss - nll_loss) # (cov_loss bây giờ được tính trong 'loss')
-    
-
-BeamHypothesis = namedtuple("BeamHypothesis", 
-    ["tokens", "score", "state", "coverage"])
-
-
+        return loss, nll_loss, (loss - nll_loss)
+        
 @META_ARCHITECTURE.register()
 class ClosedBookModel(nn.Module):
     def __init__(self, config, vocab: Vocab):
@@ -457,8 +440,7 @@ class ClosedBookModel(nn.Module):
             encoder_input=encoder_input
         )
 
-        # --- (THAY ĐỔI 1): Lấy cả 3 giá trị loss ---
-        loss_pgn, nll_loss, cov_loss = self.pgn_loss(
+        loss_pgn, _, _ = self.pgn_loss(
             final_dists = pgn_outputs,
             target_tensor = labels, 
             attention_dists = attn_list,
@@ -470,66 +452,55 @@ class ClosedBookModel(nn.Module):
             labels 
         ) # Shape: (B, T, VocabSize)
 
+        # --- (SỬA LỖI LOGIC 4: CB LOSS) ---
         cb_labels = labels.clone() 
+        # Map OOV về UNK (để model học cách dự đoán <unk>)
         cb_labels[cb_labels >= self.vocab_size] = self.vocab.unk_idx 
         
         loss_cb = self.cb_loss_func(
             cb_outputs.view(-1, self.vocab_size),
-            cb_labels.view(-1)
+            cb_labels.view(-1) # <--- Dùng bản sao an toàn (đã map về UNK)
         )
+        # --- (HẾT SỬA LỖI 4) ---
         
         total_loss = (1 - self.gamma) * loss_pgn + self.gamma * loss_cb
-        
-        # --- (THAY ĐỔI 2): Trả về 4 giá trị ---
         return pgn_outputs, total_loss
     
     def predict(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Thực hiện dự đoán bằng Greedy Search (chỉ hỗ trợ batch_size = 1).
-        """
-        # 1. Chạy Encoder (Giống hệt beam search)
-        # Giả sử x có batch_size = 1
         encoder_outputs, hidden_states, encoder_input, num_oov_in_batch = self.encoder(x)
+        batch_size = encoder_outputs.size(0)
         
-        # 2. Khởi tạo
-        # Trạng thái ban đầu
-        current_state = hidden_states
-        current_coverage = torch.zeros(encoder_outputs.size(0), encoder_outputs.size(1), device=encoder_outputs.device) # (1, S)
-        
-        # Token [BOS] làm input đầu tiên
-        decoder_input = torch.tensor([[self.vocab.bos_idx]], device=self.device, dtype=torch.long) # Shape (1, 1)
-
-        output_tokens = []
-
-        # 3. Chạy vòng lặp giải mã
+        decoder_input = torch.empty(
+            batch_size, 1,
+            dtype=torch.long,
+            device=x.device
+        ).fill_(self.vocab.bos_idx)
+        outputs = []
+        coverage = torch.zeros(encoder_outputs.size(0), encoder_outputs.size(1), device=encoder_outputs.device)
+        decoder_states = hidden_states
         for _ in range(self.MAX_LENGTH):
-            # 3.1. Chạy 1 bước PGN Decoder
-            final_dist, new_state, _, new_coverage = self.attn_decoder.forward_step(
+            decoder_output, decoder_states, _, coverage = self.attn_decoder.forward_step(
                 decoder_input,
-                current_state,
+                decoder_states,
                 encoder_outputs=encoder_outputs,
                 num_oov_in_batch=num_oov_in_batch,
                 encoder_input=encoder_input,
-                coverage=current_coverage
-            ) # final_dist shape (1, extended_vocab_size)
+                coverage=coverage
+            )
             
-            # 3.2. Lấy token tốt nhất (Greedy)
-            # Thay vì topk, chúng ta dùng argmax
-            _, next_token = torch.max(final_dist, dim=1) # Shape (1)
-            next_token_item = next_token.item()
-            
-            # 3.3. Lưu token và kiểm tra [EOS]
-            output_tokens.append(next_token_item)
-            if next_token_item == self.vocab.eos_idx:
+            top_idx = decoder_output.argmax(dim=-1) # Shape (B,)
+            # 2. Lưu token này vào danh sách output
+            # (Phải unsqueeze để (B,) -> (B, 1) rồi mới cat ở cuối)
+            outputs.append(top_idx.unsqueeze(1)) 
+
+            # 3. Chuẩn bị input cho bước tiếp theo
+            decoder_input = top_idx.clone()
+            # Map OOV (>= vocab_size) về UNK (để không crash embedding)
+            decoder_input[decoder_input >= self.vocab.vocab_size] = self.vocab.unk_idx
+            decoder_input = decoder_input.unsqueeze(1) # Shape (B, 1)
+
+            if decoder_input.item() == self.vocab.eos_idx:
                 break
+        outputs = torch.cat(outputs, dim=1)
 
-            # 3.4. Chuẩn bị cho vòng lặp tiếp theo
-            current_state = new_state
-            current_coverage = new_coverage
-            
-            # Input cho bước tiếp theo chính là token vừa sinh ra
-            decoder_input = next_token.unsqueeze(0) # Shape (1, 1)
-
-        # 4. Hoàn tất
-        # Trả về Tensor, unsqueeze(0) để tạo batch_size=1
-        return torch.tensor(output_tokens, device=self.device).unsqueeze(0)
+        return outputs
