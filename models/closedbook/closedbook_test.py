@@ -149,7 +149,7 @@ class ClosedBookSummarization(ClosedBook):
     def forward(self, input_ids, labels, extended_source_idx, extra_zeros):
         # Encoder
         source_idx = input_ids
-        source_length = (torch.ne(source    _idx, self.padding_token_idx).sum(dim=1)).long()
+        source_length = (torch.ne(source_idx, self.padding_token_idx).sum(dim=1)).long()
         encoder_outputs, encoder_hidden_states = self.encode(source_idx, source_length)
 
         batch_size = source_idx.size(0)
