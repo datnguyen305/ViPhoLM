@@ -60,8 +60,9 @@ class TextSumTaskOOV(BaseTask):
             for it, items in enumerate(self.train_dataloader):
                 input_ids = items.input_ids.to(self.device)
                 labels = items.shifted_right_label.to(self.device)
-                
-                _, loss = self.model(input_ids, labels)
+                extended_source_idx = items.extended_source_idx.to(self.device)
+                extra_zeros = items.extra_zeros.to(self.device)
+                _, loss = self.model(input_ids, labels, extended_source_idx, extra_zeros)
                 
                 # backward pass
                 self.optim.zero_grad()
@@ -83,9 +84,11 @@ class TextSumTaskOOV(BaseTask):
             for items in dataloader:
                 input_ids = items.input_ids.to(self.device)
                 label = items.label.to(self.device)
+                extended_source_idx = items.extended_source_idx.to(self.device)
+                extra_zeros = items.extra_zeros.to(self.device)
                 oov_list_batch = items.oov_list
                 with torch.no_grad():
-                    prediction_indices = self.model.predict(input_ids)
+                    prediction_indices = self.model.predict(input_ids, extended_source_idx, extra_zeros)
 
                     decoded_preds = self.decode_pgn_output(
                         prediction_indices, 
