@@ -20,14 +20,14 @@ dataset:
   test:
     type: TextSumDatasetOOV
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 16
+  batch_size: 8
   num_workers: 4
 
 model:
   name: closedbook_Wikilingual
   architecture: ClosedBookSummarization
   d_model: 256
-  embedding_size: 256
+  embedding_size: 128
   checkpoint: checkpoints/closedbook_model.pt
   hidden_size: 256
   num_enc_layers: 1
@@ -41,7 +41,7 @@ model:
   dropout_ratio: 0.1
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.001
+  learning_rate: 0.15
   score: rouge-L  # Evaluation metric
   patience: 3
   warmup: 1000
