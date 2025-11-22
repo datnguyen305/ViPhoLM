@@ -3,7 +3,7 @@ from .bilstm.bilstm import BiLSTM_Model
 from .bigru.bigru import BiGRU_Model
 from .gru.gru import GRU_Model
 from .AbstractiveTXModel.AbstractiveTXModel import AbstractiveTXModel
-from .pointer_generator.model import PointerGeneratorModel
+from .pointer_generator.pointer_generator import PointerGeneratorSummarization
 from .transformer.model.transformer import TransformerModel
 from .closedbook.closedbook import ClosedBookModel
 from .transformer_hepos.model.transformer_hepos import TransformerHeposModel

@@ -6,9 +6,9 @@ from .module import Encoder, Decoder
 from builders.model_builder import META_ARCHITECTURE
 
 
-class ClosedBook(nn.Module):
+class PointerGenerator(nn.Module):
     def __init__(self, config, vocab: Vocab):
-        super(ClosedBook, self).__init__()
+        super(PointerGenerator, self).__init__()
         self.config = config
         self.vocab = vocab
         self.device = config['device']
@@ -23,7 +23,7 @@ class ClosedBook(nn.Module):
         self.eos_token_idx = self.vocab.eos_idx
 
 @META_ARCHITECTURE.register
-class ClosedBookSummarization(ClosedBook):
+class PointerGeneratorSummarization(PointerGenerator):
     def __init__(self, config, vocab: Vocab):
         super().__init__(config, vocab)
 
