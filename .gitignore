@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pth
+*.bin
+*.csv
+*.json
+*.examine
+*.venv
+*.log
+*.idea
+*venv
+**tvm/
+**datasets/
+**checkpoints/

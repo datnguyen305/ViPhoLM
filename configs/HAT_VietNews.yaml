@@ -1,0 +1,59 @@
+vocab:
+  type: Vocab
+  path:
+    train: datasets/VietNews-dataset/train.json
+    dev: datasets/VietNews-dataset/dev.json
+    test: datasets/VietNews-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/VietNews-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/VietNews-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/VietNews-dataset/test.json
+  batch_size: 8
+  num_workers: 8
+
+model:
+  name: HATModel_VietNews
+  architecture: HATModel
+  segment_len: 128
+  hidden_size: 256
+  max_segments: 64
+  max_length: 512  # Giới hạn độ dài tối đa của văn bản
+  nhead: 4
+  num_layers: 4
+  encoder_layout:
+    "0":
+      sentence_encoder: true
+      document_encoder: false
+    "1":
+      sentence_encoder: true
+      document_encoder: true
+    "2":
+      sentence_encoder: true
+      document_encoder: true
+    "3":
+      sentence_encoder: true
+      document_encoder: true
+  device: cuda
+
+training:
+  batch_size: 8
+  learning_rate: 0.0001
+  rl_weight: 0.5  # Trọng số cho RL loss
+  checkpoint_path: checkpoints
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTask

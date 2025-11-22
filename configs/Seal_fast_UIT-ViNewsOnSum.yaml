@@ -1,0 +1,87 @@
+seed: 777
+use_cuda: true
+batch_size: 32
+log_every: 100
+save_path: ./models
+
+abstractor:
+  emb_dim: 128
+  n_hidden: 256
+  n_layer: 2
+  bidirectional: true
+  dropout: 0.2
+  max_len: 100
+  beam_size: 5
+  lr: 0.001
+  clip_grad: 2.0
+  epochs: 8
+  save_path: ./models/abstractor
+
+extractor:
+  emb_dim: 128
+  n_hidden: 256
+  n_layer: 1
+  bidirectional: true
+  dropout: 0.2
+  lr: 0.001
+  clip_grad: 2.0
+  epochs: 10
+  save_path: ./models/extractor
+
+rl:
+  batch_size: 8
+  lr: 0.0001
+  gamma: 0.99
+  grad_clip: 2.0
+  reward: rouge-l
+  save_path: ./models/rl
+
+vocab:
+  type: Vocab
+  path:
+    train: datasets/UIT-ViNewsOnSum-dataset/train.json
+    dev: datasets/UIT-ViNewsOnSum-dataset/dev.json
+    test: datasets/UIT-ViNewsOnSum-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+max_art_len: 400
+max_abs_len: 100
+
+dataset:
+  train:
+    type: TextSumDataset
+    path: datasets/UIT-ViNewsOnSum-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/UIT-ViNewsOnSum-dataset/dev.json
+  test:
+    type: TextSumDataset
+    path: datasets/UIT-ViNewsOnSum-dataset/test.json
+  batch_size: 8
+  num_workers: 4
+
+model:
+  name: fast_abs_UIT-ViNewsOnSum
+  architecture: CopySummSeal
+  emb_dim: 128
+  dropout: 0.2
+  max_len: 100
+  beam_size: 5
+  n_hidden: 256
+  n_layer: 2
+  bidirectional: true
+  device: cpu 
+  d_model: 256
+
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.15
+  lr_coverage: 0.15
+  score: rouge
+  patience: 3
+  warmup: 1000
+task: TextSumTask

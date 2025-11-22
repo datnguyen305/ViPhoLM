@@ -1,0 +1,55 @@
+vocab:
+  type: Vocab
+  path:
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 32
+  num_workers: 16
+
+model:
+  name: BottomUpSummarizer_Wikilingual
+  architecture: BottomUpSummarizer
+  hidden_size: 512
+  d_model: 256
+  encoder:
+    layer_dim: 3
+    input_dim: 512
+    hidden_size: 512
+    bidirectional: True
+    dropout: 0.1
+  decoder:
+    layer_dim: 3
+    input_dim: 512
+    hidden_size: 512
+    bidirectional: False
+    dropout: 0.1
+  content_selector:
+    hidden_size: 512
+  lambda_coverage: 1.0
+  device: cuda
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.5
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTask

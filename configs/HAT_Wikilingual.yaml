@@ -1,0 +1,62 @@
+vocab:
+  type: Vocab
+  path:
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 32
+  num_workers: 16
+
+model:
+  name: HATModel_Wikilingual
+  architecture: HATModel
+  segment_len: 128
+  hidden_size: 256
+  max_segments: 64
+  nhead: 4
+  num_layers: 4
+  encoder_layout:
+    "0":
+      sentence_encoder: true
+      document_encoder: false
+    "1":
+      sentence_encoder: true
+      document_encoder: true
+    "2":
+      sentence_encoder: true
+      document_encoder: true
+    "3":
+      sentence_encoder: true
+      document_encoder: true
+  device: cuda
+
+training:
+  batch_size: 32
+<<<<<<< HEAD
+  learning_rate: 0.0005
+=======
+  learning_rate: 0.0001
+>>>>>>> ad09ab838eb0c013beef983fe077f612539dd4ed
+  rl_weight: 0.5  # Trọng số cho RL loss
+  checkpoint_path: "checkpoints"
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTask

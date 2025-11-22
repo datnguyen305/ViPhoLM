@@ -1,0 +1,69 @@
+vocab:
+  type: HierarchicalVocab
+  max_sents: 50
+  max_sent_len: 100
+  path:
+    train: datasets/Vietnews-dataset/train.json
+    dev: datasets/Vietnews-dataset/dev.json
+    test: datasets/Vietnews-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+  spacy_model: vi_core_news_lg
+  pos_tags: []
+  ner_tags: []
+  tfidf:
+    smooth_idf: true
+    sublinear_tf: true
+
+dataset:
+  train:
+    type: TextSumDatasetHierarchical
+    path: datasets/Vietnews-dataset/train.json
+    max_sents: 50
+    max_sent_len: 100
+  dev:
+    type: TextSumDatasetHierarchical
+    path: datasets/Vietnews-dataset/dev.json
+    max_sents: 50
+    max_sent_len: 100
+  test:
+    type: TextSumDatasetHierarchical
+    path: datasets/Vietnews-dataset/test.json
+    max_sents: 50
+    max_sent_len: 100
+  batch_size: 64
+  num_workers: 16
+
+model:
+  name: AbstractiveTXModel_hierarchical_Wikilingual
+  architecture: AbstractiveTXModel
+  hidden_size: 512
+  device: cuda
+  dropout: 0.5
+  max_sents: 50  # Added missing parameter
+  max_sent_len: 100  # Added missing parameter
+  teacher_forcing_ratio: 0.5
+  coverage_loss_weight: 0.1
+  pos_dim: 64
+  layer_dim: 1
+  dropout: 0.5
+  pointer_gen: true
+  coverage: true
+  coverage_loss_weight: 0.1
+  teacher_forcing_ratio: 0.5
+  encoder:
+    bidirectional: true
+  decoder:
+    bidirectional: false
+
+training:
+  checkpoint_path: checkpoints
+  learning_rate: 0.001
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTask

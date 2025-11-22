@@ -1,0 +1,59 @@
+
+vocab:
+  type: Vocab
+  path:
+    train: /kaggle/input/sample/train.json
+    dev: /kaggle/input/sample/dev.json
+    test: /kaggle/input/sample/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: /kaggle/input/sample/train.json
+  dev:
+    type: TextSumDataset
+    path: /kaggle/input/sample/dev.json
+  test:
+    type: TextSumDataset
+    path: /kaggle/input/sample/test.json
+  batch_size: 8
+  num_workers: 4
+
+model:
+  name: HATModel_UIT-ViNewsOnSum
+  architecture: HATModel
+  segment_len: 128
+  hidden_size: 256
+  max_segments: 64
+  nhead: 2
+  num_layers: 4
+  encoder_layout:
+    "0":
+      sentence_encoder: true
+      document_encoder: false
+    "1":
+      sentence_encoder: true
+      document_encoder: true
+    "2":
+      sentence_encoder: true
+      document_encoder: true
+    "3":
+      sentence_encoder: true
+      document_encoder: true
+  device: cuda
+
+training:
+  batch_size: 8
+  learning_rate: 0.00001  # Giảm xuống 1e-4
+  rl_weight: 0.5  # Trọng số cho RL loss
+  checkpoint_path: "checkpoints"
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTask

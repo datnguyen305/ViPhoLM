@@ -1,0 +1,52 @@
+
+vocab:
+  type: Vocab
+  path:
+    train: datasets/UIT-ViNewsOnSum-dataset/train.json
+    dev: datasets/UIT-ViNewsOnSum-dataset/dev.json
+    test: datasets/UIT-ViNewsOnSum-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/ViNewsOnSum-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/ViNewsOnSum-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/ViNewsOnSum-dataset/test.json
+  batch_size: 32
+  num_workers: 8
+
+model:
+  name: HEPOS_Baseline_ViNewsOnSum     # Tên checkpoint để dễ nhận biết
+  architecture: HEPOSBaselineSummarizer # Tên lớp wrapper đã đăng ký với META_ARCHITECTURE
+  d_model: 1024                     # Kích thước embedding (BART-large dùng 1024)
+  num_heads: 16                     # Số lượng attention heads (BART-large dùng 16)
+  num_encoder_layers: 12            # Số lớp Encoder (BART-large dùng 12)
+  num_decoder_layers: 12            # Số lớp Decoder (BART-large dùng 12)
+  dropout: 0.1
+  attention_dropout: 0.1            # Thêm tham số này để kiểm soát attention dropout
+  max_src_len: 4096                 # Độ dài tối đa cho văn bản nguồn
+  max_tgt_len: 100                  # Giữ nguyên độ dài tối đa cho tóm tắt đích
+  sinkhorn_bucket_size: 64          # Kích thước bucket cho Sinkhorn Attention (Encoder)
+  hepos_stride_size: 4              # Kích thước bước nhảy cho HEPOS (Decoder)
+  label_smoothing: 0.1
+  device: cpu
+
+training:
+  checkpoint_path: "checkpoints"
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+  batch_size: 32
+  learning_rate: 0.0001
+  epochs: 20
+
+task: TextSumTask

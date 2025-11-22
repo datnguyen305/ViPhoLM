@@ -1,0 +1,48 @@
+
+vocab:
+  type: Vocab
+  path:
+    train: datasets/UIT-ViNewsOnSum-dataset/train.json
+    dev: datasets/UIT-ViNewsOnSum-dataset/dev.json
+    test: datasets/UIT-ViNewsOnSum-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/ViNewsOnSum-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/ViNewsOnSum-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/ViNewsOnSum-dataset/test.json
+  batch_size: 32
+  num_workers: 8
+
+model:
+  name: SENECASummarizer
+  architecture: SENECASummarizer
+  d_model: 512
+  num_heads: 8
+  num_layers: 3
+  num_entity_types: 50  # Số loại thực thể
+  dropout: 0.1
+  max_tgt_len: 100
+  teacher_forcing: True
+  use_coherence_reward: True
+
+training:
+  batch_size: 32
+  lr: 1e-4
+  rl_weight: 0.5  # Trọng số cho RL loss
+  checkpoint_path: "checkpoints"
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTask

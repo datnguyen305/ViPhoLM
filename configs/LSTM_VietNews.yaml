@@ -1,0 +1,52 @@
+vocab:
+  type: Vocab
+  path:
+    train: datasets/Vietnews-dataset/train.json
+    dev: datasets/Vietnews-dataset/dev.json
+    test: datasets/Vietnews-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/test.json
+  batch_size: 32
+  num_workers: 16
+
+model:
+  name: LSTM_Model3layer_VietNews
+  architecture: LSTM_Model
+  d_model: 512
+  encoder:
+    layer_dim: 3
+    input_dim: 512
+    hidden_size: 512
+    bidirectional: False
+    dropout: 0.1
+  decoder:
+    layer_dim: 3
+    input_dim: 512
+    hidden_size: 512
+    bidirectional: False
+    dropout: 0.1
+  label_smoothing: 0.1
+  device: cuda
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.5
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: HATClassificationTask

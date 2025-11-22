@@ -1,0 +1,87 @@
+vocab:
+  type: Vocab
+  path:
+    train: datasets/Vietnews-dataset/train.json
+    dev: datasets/Vietnews-dataset/dev.json
+    test: datasets/Vietnews-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/test.json
+  batch_size: 32
+  num_workers: 8
+
+model:
+  name: LongformerEncoderDecoder_Vietnews
+  architecture: LongformerEncoderDecoderModel
+  d_model: 768
+  label_smoothing: 0.1
+  device: cuda
+  attention_dilation:
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+  attention_mode: sliding_chunks
+  attention_probs_dropout_prob: 0.1
+  attention_window:
+    - 256
+    - 256
+    - 256
+    - 256
+    - 256
+    - 256
+    - 256
+    - 256
+    - 256
+    - 256
+    - 256
+    - 256
+  autoregressive: false
+  finetuning_task: null
+  hidden_act: gelu
+  hidden_dropout_prob: 0.1
+  hidden_size: 768
+  ignore_attention_mask: false
+  initializer_range: 0.02
+  intermediate_size: 3072
+  layer_norm_eps: 1e-05
+  max_position_embeddings: 3096
+  num_attention_heads: 12
+  num_hidden_layers: 12
+  num_labels: 2
+  output_attentions: false
+  output_hidden_states: false
+  pruned_heads: {}
+  torchscript: false
+  type_vocab_size: 1
+  use_bfloat16: false
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.0001
+  warmup: 500
+  patience: 5
+  score: rouge-L
+
+task: TextSumTask

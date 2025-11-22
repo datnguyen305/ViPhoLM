@@ -1,0 +1,65 @@
+vocab:
+  type: Vocab
+  path:
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train:
+    type: TextSumDatasetOOV
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDatasetOOV
+    path: datasets/Wikilingual-dataset/dev.json
+  test:
+    type: TextSumDatasetOOV
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 16
+  num_workers: 4
+
+model:
+  name: closedbook_Wikilingual
+  architecture: ClosedBookModel
+  hidden_size: 256
+  checkpoint: checkpoints/closedbook_model.pt
+  num_layers: 1
+  encoder:
+    dropout: 0.7
+    num_layers: 1
+    bidirectional: true
+  decoder:
+    dropout: 0.7
+    num_layers: 1
+    bidirectional: false
+  pointer_gen: true  # Sử dụng cơ chế Pointer-Generator
+  is_coverage: true  # Sử dụng Coverage Loss
+  max_enc_steps: 400
+  max_dec_steps: 100
+  beam_size: 2
+  min_dec_steps: 35
+  adagrad_init_acc: 0.1
+  rand_unif_init_mag: 0.02
+  trunc_norm_init_std: 0.0001
+  max_grad_norm: 2.0
+  device: cuda
+  gamma: 0.5
+  dropout: 0.1
+  eps: 1e-12        
+  lambda_coverage: 1.0
+  d_model: 256
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.001
+  score: rouge-L  # Evaluation metric
+  patience: 3
+  warmup: 1000
+  epochs: 10
+  max_iterations: 500000
+
+task: TextSumTaskOOV

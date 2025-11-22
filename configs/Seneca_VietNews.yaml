@@ -1,0 +1,77 @@
+
+vocab:
+  type: Vocab
+  path:
+    train: datasets/VietNews-dataset/train.json
+    dev: datasets/VietNews-dataset/dev.json
+    test: datasets/VietNews-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/VietNews-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/VietNews-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/VietNews-dataset/test.json
+  batch_size: 4
+  num_workers: 2
+
+# Cấu hình cho Model
+model:
+  name: Seneca_VietNews       # Tên checkpoint để dễ nhận biết
+  architecture: SENECAModel # Phải khớp với tên class đã đăng ký trong @META_ARCHITECTURE.register()
+  d_model: 1024
+  # Chứa các cấu hình con dành riêng cho Seneca
+  SENECA:
+    EXTRACTOR:
+      EMB_DIM: 128
+      CONV_HIDDEN: 100
+      LSTM_HIDDEN: 256
+      LSTM_LAYER: 1
+      BIDIRECTIONAL: true
+      N_HOP: 1
+      DROPOUT: 0.3
+    
+    # SENECA Generator config
+    GENERATOR:
+      EMB_DIM: 128
+      N_HIDDEN: 256
+      BIDIRECTIONAL: true
+      N_LAYER: 1
+      DROPOUT: 0.3
+  
+  # Inference config
+  INFERENCE:
+    TOP_K: 4  # extract top-4 sentences
+    MAX_LEN: 120
+    BEAM_SIZE: 4
+    MIN_LEN: 10
+    DIVERSE: 1.0
+  device: cpu
+
+# Cấu hình cho quá trình Huấn luyện
+training:
+  batch_size: 16
+  learning_rate: 0.0001
+  # Trọng số cho loss của Extractor và Generator trong giai đoạn supervised
+  extractor_loss_weight: 0.5 
+  generator_loss_weight: 0.5
+  checkpoint_path: "checkpoints"
+  epochs: 20
+  # Cấu hình cho giai đoạn Reinforcement Learning (RL)
+  rl_lr: 0.00001
+  rl_weight: 0.995      # Thường trọng số này rất cao
+  warmup: 1000
+  patience: 5
+  grad_clip: 2.0        # Thêm gradient clipping để huấn luyện ổn định
+  score: rouge-L
+
+task: TextSumTask

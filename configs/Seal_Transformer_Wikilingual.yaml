@@ -1,0 +1,64 @@
+vocab:
+  type: Vocab
+  path:
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 8
+  num_workers: 4
+
+model:
+  name: Seal_Transformer_Wikilingual
+  architecture: TransformerSealModel
+  d_model: 512
+  n_layers: 6
+  n_head: 8
+  ffn_hidden: 2048
+  drop_prob: 0.1
+  max_len: 1024
+  encoder:
+    d_model: 512
+    n_head: 8
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    n_layers: 6
+    max_len: 1024
+    segment_size: 512
+    device: cuda
+  decoder:
+    d_model: 512
+    n_head: 8
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    n_layers: 6
+    max_len: 1024
+    segment_size: 512
+    device: cuda
+  label_smoothing: 0.1
+  device: cuda
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.15
+  lr_coverage: 0.15
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTask
