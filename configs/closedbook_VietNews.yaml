@@ -1,9 +1,9 @@
 vocab:
   type: Vocab
   path:
-    train: datasets/VietNews-dataset/train.json
-    dev: datasets/VietNews-dataset/dev.json
-    test: datasets/VietNews-dataset/test.json
+    train: datasets/Vietnews-dataset/train.json
+    dev: datasets/Vietnews-dataset/dev.json
+    test: datasets/Vietnews-dataset/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
@@ -14,15 +14,15 @@ vocab:
 dataset:
   train:
     type: TextSumDataset
-    path: datasets/VietNews-dataset/train.json
+    path: datasets/Vietnews-dataset/train.json
   dev:
     type: TextSumDataset
-    path: datasets/VietNews-dataset/dev.json
+    path: datasets/Vietnews-dataset/dev.json
   test:
     type: TextSumDataset
-    path: datasets/VietNews-dataset/test.json
+    path: datasets/Vietnews-dataset/test.json
   batch_size: 16
-  num_workers: 4
+  num_workers: 2
 
 model:
   name: closedbook_Wikilingual
@@ -33,18 +33,20 @@ model:
   encoder:
     hidden_size: 256
     dropout: 0.7
-    num_layers: 1
+    num_layers: 4
     bidirectional: true
+    device: cuda
   decoder:
     hidden_size: 256
     dropout: 0.7
-    num_layers: 1
+    num_layers: 4
     bidirectional: false
+    device: cuda
   pointer_gen: true  # Sử dụng cơ chế Pointer-Generator
   is_coverage: true  # Sử dụng Coverage Loss
   hidden_dim: 256
   emb_dim: 128
-  batch_size: 32
+  batch_size: 16
   max_enc_steps: 400
   max_dec_steps: 100
   beam_size: 4
@@ -63,11 +65,11 @@ model:
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.001
+  learning_rate: 1
   score: rouge-L  # Evaluation metric
-  patience: 3
+  patience: 10
   warmup: 1000
-  epochs: 10
+  # epochs: 10
   batch_size: 32
   max_iterations: 500000
 

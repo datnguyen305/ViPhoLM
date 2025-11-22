@@ -39,8 +39,9 @@ class LongformerEncoderDecoderConfig:
         self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
         self.hidden_dropout_prob = config.hidden_dropout_prob
         self.max_position_embeddings = config.max_position_embeddings
-        self.max_len = config.max_len
         self.device = config.device
+        
+        self.initializer_range = config.initializer_range
         
         # Validate attention mode
         assert self.attention_mode in ['tvm', 'sliding_chunks'], f"attention_mode must be 'tvm' or 'sliding_chunks', got {self.attention_mode}"
@@ -454,6 +455,8 @@ class LongformerEncoderDecoderModel(nn.Module):
         self.trg_bos_idx = vocab.bos_idx
         self.trg_eos_idx = vocab.eos_idx
         
+        self.MAX_LENGTH = vocab.max_sentence_length + 2
+        
         # Initialize encoder and decoder
         self.encoder = LongformerEncoder(config, vocab)
         self.decoder = StandardDecoder(config, vocab)
@@ -461,6 +464,7 @@ class LongformerEncoderDecoderModel(nn.Module):
         self.d_model = config.d_model
         self.device = config.device
         self.config = config
+        self.vocab = vocab
         
         # Store pad idx in config for decoder
         self.config.pad_idx = vocab.pad_idx
@@ -537,13 +541,25 @@ class LongformerEncoderDecoderModel(nn.Module):
         return input_ids
         
 
-    def make_longformer_attention_mask(self, src):
-        # Create attention mask for Longformer
-        # 0 = local attention, positive = global attention, negative = no attention
-        attention_mask = (src != self.src_pad_idx).long()
-        # Convert padding positions to -1 (no attention)
+    def make_longformer_attention_mask(self, src, use_global_for_bos=True):
+        """
+        Creates attention mask for Longformer:
+        - Negative values (-1): no attention (padding)
+        - Zero (0): local windowed attention
+        - Positive values (>0): global attention
+        """
+        attention_mask = torch.zeros_like(src, dtype=torch.long)
+        
+        # Mark padding positions with -1
         attention_mask = attention_mask.masked_fill(src == self.src_pad_idx, -1)
+        
+        # Optionally mark BOS tokens with global attention
+        if use_global_for_bos and hasattr(self, 'trg_bos_idx'):
+            attention_mask = attention_mask.masked_fill(src == self.trg_bos_idx, 2)
+        
         return attention_mask.unsqueeze(1).unsqueeze(1)
+    
+    
 
     def make_trg_mask(self, trg):
         trg_len = trg.shape[1]
@@ -555,10 +571,6 @@ class LongformerEncoderDecoderModel(nn.Module):
 
     def predict(self, src: torch.Tensor) -> torch.Tensor:
         config = self.config
-        
-        # Truncate src if too long
-        if src.shape[1] > config.max_len:
-            src = src[:, :config.max_len]
         
         # Pad source to window size
         src = self._pad_to_window_size(src)
@@ -577,7 +589,7 @@ class LongformerEncoderDecoderModel(nn.Module):
         outputs = []
         
         # Generate tokens one by one
-        for step in range(config.max_len):
+        for step in range(self.MAX_LENGTH):
             # Create target mask
             trg_mask = self.make_trg_mask(decoder_input)
             
@@ -594,7 +606,7 @@ class LongformerEncoderDecoderModel(nn.Module):
             decoder_input = torch.cat([decoder_input, next_token], dim=1)
             
             # Check for EOS token (assuming batch_size=1 for simplicity)
-            if batch_size == 1 and next_token.item() == self.trg_eos_idx:
+            if next_token.item() == self.trg_eos_idx:
                 break
         
         # Concatenate all outputs
@@ -606,3 +618,4 @@ class LongformerEncoderDecoderModel(nn.Module):
         return outputs
     
 #  python3 main.py --config-file configs/longformer_Wikilingual.yaml
+

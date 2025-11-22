@@ -75,7 +75,7 @@ class TextSumTask(BaseTask):
                 # update the training status
                 pbar.set_postfix(loss=running_loss / (it + 1))
                 pbar.update()
-                # self.scheduler.step()
+                self.scheduler.step()
 
     def evaluate_metrics(self, dataloader: DataLoader) -> dict:
         self.model.eval()
@@ -127,4 +127,8 @@ class TextSumTask(BaseTask):
 
         self.logger.info("Test scores %s", scores)
         json.dump(scores, open(os.path.join(self.checkpoint_path, "scores.json"), "w+"), ensure_ascii=False, indent=4)
+<<<<<<< HEAD
         json.dump(results, open(os.path.join(self.checkpoint_path, "predictions.json"), "w+"), ensure_ascii=False, indent=4)
+=======
+        json.dump(results, open(os.path.join(self.checkpoint_path, "predictions.json"), "w+"), ensure_ascii=False, indent=4)
+>>>>>>> b70187e56f412d653bd3243fb11c611c8be1d12e

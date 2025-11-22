@@ -21,7 +21,7 @@ dataset:
     type: TextSumDataset
     path: datasets/Vietnews-dataset/test.json
   batch_size: 16
-  num_workers: 16
+  num_workers: 2
 
 model:
   name: Pointer_Generator_VietNews

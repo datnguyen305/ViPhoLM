@@ -1,3 +1,4 @@
+# transformer embedding module
 from torch import nn
 
 from models.transformer.embedding.positional_encoding import PositionalEncoding
@@ -24,9 +25,8 @@ class TransformerEmbedding(nn.Module):
         self.drop_out = nn.Dropout(p=drop_prob)
 
     def forward(self, x):
-        max_len = min(x.shape[1], self.pos_emb.max_len)  # Giới hạn độ dài
-        x = x[:, :max_len]  # Cắt input_ids nếu cần
+        
 
         tok_emb = self.tok_emb(x)
-        pos_emb = self.pos_emb(x[:, :max_len])  # Tạo pos_emb theo chiều dài thực tế
+        pos_emb = self.pos_emb(x) 
         return self.drop_out(tok_emb + pos_emb)
