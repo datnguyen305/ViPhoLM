@@ -1,0 +1,51 @@
+vocab:
+  type: Vocab
+  path:
+    train: datasets/VietNews-dataset/train.json
+    dev: datasets/VietNews-dataset/dev.json
+    test: datasets/VietNews-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train:
+    type: TextSumDatasetOOV
+    path: datasets/VietNews-dataset/train.json
+  dev:
+    type: TextSumDatasetOOV
+    path: datasets/VietNews-dataset/dev.json
+  test:
+    type: TextSumDatasetOOV
+    path: datasets/VietNews-dataset/test.json
+  batch_size: 16
+  num_workers: 4
+
+model:
+  name: closedbook_VietNews
+  architecture: ClosedBookSummarization
+  d_model: 256
+  embedding_size: 128
+  checkpoint: checkpoints/closedbook_VietNews_model.pt
+  hidden_size: 256
+  num_enc_layers: 1
+  num_dec_layers: 1
+  bidirectional: true
+  is_attention: true
+  is_pgen: true
+  is_coverage: true
+  cov_loss_lambda: 1.0
+  device: cuda
+  dropout_ratio: 0.1
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.15
+  score: rouge-L  # Evaluation metric
+  patience: 3
+  warmup: 1000
+  epochs: 10
+  max_iterations: 500000
+
+task: TextSumTaskOOV
