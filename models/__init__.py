@@ -3,8 +3,8 @@ from .bilstm.bilstm import BiLSTM_Model
 from .bigru.bigru import BiGRU_Model
 from .gru.gru import GRU_Model
 from .AbstractiveTXModel.AbstractiveTXModel import AbstractiveTXModel
-from .pointer_generator.model import PointerGeneratorModel
-from .transformer.model.transformer import TransformerModel
+from .pointer_generator import PointerGeneratorModel
+from .transformer.transformer import TransformerModel
 from .closedbook.closedbook import ClosedBookModel
 from .transformer_hepos.model.transformer_hepos import TransformerHeposModel
 from .transformer_seal.model.transformer_seal import TransformerSealModel
@@ -14,8 +14,4 @@ from .fast_seal.copy_sum import CopySummSeal
 from .hat.hat_model import HATModel
 from .seneca.seneca import SENECAModel
 from .longformer.longformer_encoder_decoder import LongformerEncoderDecoderModel
-<<<<<<< HEAD
 from .bottom_up.model import BottomUpSummarizer
-=======
-from .bottom_up.model import BottomUpSummarizer
->>>>>>> b70187e56f412d653bd3243fb11c611c8be1d12e

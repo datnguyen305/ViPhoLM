@@ -12,3 +12,4 @@ __pycache__
 **tvm/
 **datasets/
 **checkpoints/
+*.zip
