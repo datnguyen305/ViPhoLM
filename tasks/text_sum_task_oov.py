@@ -56,39 +56,23 @@ class TextSumTaskOOV(BaseTask):
         self.model.train()
 
         running_loss = .0
-        # Thêm các biến để log
-        running_nll_loss = .0
-        running_cov_loss = .0
-
         with tqdm(desc='Epoch %d - Training' % (self.epoch+1), unit='it', total=len(self.train_dataloader)) as pbar:
             for it, items in enumerate(self.train_dataloader):
                 input_ids = items.input_ids.to(self.device)
                 labels = items.shifted_right_label.to(self.device)
-                
-                # Lấy tất cả 4 giá trị loss từ model
-                _, total_loss, nll_loss, cov_loss = self.model(input_ids, labels)
+                extended_source_idx = items.extended_source_idx.to(self.device)
+                extra_zeros = items.extra_zeros.to(self.device)
+                _, loss = self.model(input_ids, labels, extended_source_idx, extra_zeros)
                 
                 # backward pass
                 self.optim.zero_grad()
-                total_loss.backward() # Dùng total_loss
-
-                # --- DÒNG QUAN TRỌNG NHẤT ---
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                # -----------------------------
-                
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 2.0)
                 self.optim.step()
-                
-                # Cập nhật running loss
-                running_loss += total_loss.item()
-                running_nll_loss += nll_loss.item()
-                running_cov_loss += cov_loss.item()
+                running_loss += loss.item()
 
                 # update the training status
-                pbar.set_postfix(
-                    loss=running_loss / (it + 1),
-                    nll=running_nll_loss / (it + 1), # Loss sinh từ
-                    cov=running_cov_loss / (it + 1)  # Loss chống lặp
-                )
+                pbar.set_postfix(loss=running_loss / (it + 1))
                 pbar.update()
                 self.scheduler.step()
 
@@ -100,9 +84,11 @@ class TextSumTaskOOV(BaseTask):
             for items in dataloader:
                 input_ids = items.input_ids.to(self.device)
                 label = items.label.to(self.device)
+                extended_source_idx = items.extended_source_idx.to(self.device)
+                extra_zeros = items.extra_zeros.to(self.device)
                 oov_list_batch = items.oov_list
                 with torch.no_grad():
-                    prediction_indices = self.model.predict(input_ids)
+                    prediction_indices = self.model.predict(input_ids, extended_source_idx, extra_zeros)
 
                     decoded_preds = self.decode_pgn_output(
                         prediction_indices, 
