@@ -4,7 +4,7 @@ from .bigru.bigru import BiGRU_Model
 from .gru.gru import GRU_Model
 from .AbstractiveTXModel.AbstractiveTXModel import AbstractiveTXModel
 from .pointer_generator.model import PointerGeneratorModel
-from .transformer.model.transformer import TransformerModel
+from .transformer.transformer import TransformerModel
 from .closedbook.closedbook import ClosedBookModel
 from .transformer_hepos.model.transformer_hepos import TransformerHeposModel
 from .transformer_seal.model.transformer_seal import TransformerSealModel

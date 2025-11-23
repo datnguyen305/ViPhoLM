@@ -53,7 +53,7 @@ model:
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.0005   
+  learning_rate: 0.15   
   lr_coverage: 0.15
   warmup: 1000
   patience: 5
