@@ -9,7 +9,7 @@ from vocabs.vocab import Vocab
 
 
 class PositionalEncoding(nn.Module):
-    """Lớp Positional Encoding sin/cos chuẩn."""
+    """Lớp Positional Encoding sin/cos """
     def __init__(self, d_model, dropout=0.1, max_len=10240):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
