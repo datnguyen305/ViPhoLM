@@ -77,7 +77,7 @@ class TransformerModel(nn.Module):
         src = src[:, :config.max_len]
         tgt = tgt[:, :config.max_len]
 
-        # FIXED: Use tgt[:-1] as input, predict tgt[1:]
+        # Use tgt[:-1] as input, predict tgt[1:]
         tgt_input = tgt[:, :-1]
         tgt_output = tgt[:, 1:]
 
