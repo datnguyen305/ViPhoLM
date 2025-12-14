@@ -409,9 +409,9 @@ class ClosedBookModel(nn.Module):
         self.shared_embedding = nn.Embedding(
             vocab.vocab_size, config.hidden_size, device=config.device
         )
-        self.encoder = Encoder(config, vocab, self.shared_embedding)
-        self.attn_decoder = Decoder(config, vocab, self.shared_embedding)
-        self.cb_decoder = DecoderClosedBook(config, vocab, self.shared_embedding)
+        self.encoder = Encoder(config.encoder, vocab, self.shared_embedding)
+        self.attn_decoder = Decoder(config.decoder, vocab, self.shared_embedding)
+        self.cb_decoder = DecoderClosedBook(config.decoder, vocab, self.shared_embedding)
 
         self.gamma = config.gamma
         self.d_model = config.d_model

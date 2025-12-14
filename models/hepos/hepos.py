@@ -27,7 +27,7 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 # Các hàm tiện ích cho Sinkhorn Attention
-def gumbel_sinkhorn(log_alpha, temp=0.7, n_iters=7):
+def gumbel_sinkhorn(log_alpha, temp=0.9, n_iters=4):
     """Thuật toán Gumbel-Sinkhorn để tạo ma trận hoán vị."""
     gumbel = -torch.log(-torch.log(torch.rand_like(log_alpha) + 1e-20) + 1e-20)
     log_alpha = (log_alpha + gumbel) / temp
@@ -215,11 +215,16 @@ class SinkhornEncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
+    
+    def causal_mask(size, device):
+        return torch.triu(torch.ones(size, size, device=device), diagonal=1).bool()
 
     def forward(self, src, src_mask=None):
         # Sub-layer 1: Self-Attention
-        attn_output = self.self_attn(src, padding_mask=src_mask)
-        src = self.norm1(src + self.dropout(attn_output))
+        src2 = self.norm1(src)
+        attn_output = self.self_attn(src2, padding_mask=src_mask)
+        src = src + self.dropout(attn_output)
+
         # Sub-layer 2: Feed Forward
         ffn_output = self.ffn(src)
         src = self.norm2(src + self.dropout(ffn_output))
@@ -252,7 +257,9 @@ class HeposDecoderLayer(nn.Module):
         # Sub-layer 3: Feed Forward
         ffn_output = self.ffn(tgt)
         tgt = self.norm3(tgt + self.dropout(ffn_output))
+        
         return tgt
+
 
 
 @META_ARCHITECTURE.register()

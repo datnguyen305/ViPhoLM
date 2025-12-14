@@ -1,9 +1,9 @@
 vocab:
   type: Vocab
   path:
-    train: datasets/Wikilingual-dataset/train.json
-    dev: datasets/Wikilingual-dataset/dev.json
-    test: datasets/Wikilingual-dataset/test.json
+    train: datasets/VietNews-dataset/train.json
+    dev: datasets/VietNews-dataset/dev.json
+    test: datasets/VietNews-dataset/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
@@ -13,22 +13,22 @@ vocab:
 dataset:
   train:
     type: TextSumDatasetOOV
-    path: datasets/Wikilingual-dataset/train.json
+    path: datasets/VietNews-dataset/train.json
   dev:
     type: TextSumDatasetOOV
-    path: datasets/Wikilingual-dataset/dev.json
+    path: datasets/VietNews-dataset/dev.json
   test:
     type: TextSumDatasetOOV
-    path: datasets/Wikilingual-dataset/test.json
-  batch_size: 8
+    path: datasets/VietNews-dataset/test.json
+  batch_size: 16
   num_workers: 4
 
 model:
-  name: closedbook_Wikilingual
+  name: closedbook_VietNews
   architecture: ClosedBookSummarization
   d_model: 256
   embedding_size: 128
-  checkpoint: checkpoints/closedbook_model.pt
+  checkpoint: checkpoints/closedbook_VietNews_model.pt
   hidden_size: 256
   num_enc_layers: 1
   num_dec_layers: 1
