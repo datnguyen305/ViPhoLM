@@ -1,0 +1,65 @@
+vocab:
+  type: ViWordVocab
+  # --- SỬA ĐỂ KHỚP VỚI ViWordVocab CODE ---
+  # Code gọi config.TRAIN nên phải khai báo trực tiếp ở đây, không lồng trong "path"
+  TRAIN: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/train.json
+  DEV: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/dev.json
+  TEST: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/test.json
+  # Code __init__ gọi make_vocab(config.JSON_PATH)
+  JSON_PATH: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/train.json
+  TOKENIZER: null # Nếu không dùng tokenizer ngoài thì để null
+  
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDatasetPhoneme # Đảm bảo tên class Dataset trong code là TextSumDatasetPhoneme
+    path: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDatasetPhoneme
+    path: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/dev.json
+  test: 
+    type: TextSumDatasetPhoneme
+    path: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/test.json
+  batch_size: 16
+  num_workers: 4
+
+model:
+  name: Transformer_Phoneme_Wikilingual
+  # Đảm bảo tên class Model đã đăng ký là TransformerModel (hoặc sửa trong config này thành TransformerModel)
+  architecture: Transformer_Phoneme_Model 
+  d_model: 512
+  max_len: 1024
+  device: cuda
+  n_head: 8
+  drop_prob: 0.1
+  ffn_hidden: 2048 
+  n_layers: 6
+  max_decoding_len: 30  # Giới hạn độ dài câu sinh ra trong quá trình inference
+  # --- SỬA THAM SỐ KHỚP VỚI CODE TRANSFORMER MỚI ---
+  encoder:
+    n_layers: 6
+    n_head: 8        # Code dùng n_heads (có s)
+    ffn_hidden: 2048        # Code dùng d_ff (thay vì ffn_hidden)
+    drop_prob: 0.1      # Code dùng dropout (thay vì drop_prob)
+  
+  decoder:
+    n_layers: 6
+    n_head: 8
+    ffn_hidden: 2048
+    drop_prob: 0.1
+
+training:
+  checkpoint_path: "checkpoints"
+  # QUAN TRỌNG: Giảm LR xuống. 0.15 là quá lớn cho Transformer, sẽ gây lỗi.
+  learning_rate: 1 
+  lr_coverage: 0.15
+  warmup: 4000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTaskPhoneme # Đảm bảo khớp với tên @META_TASK.register() trong file task
