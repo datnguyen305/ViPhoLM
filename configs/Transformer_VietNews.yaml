@@ -3,7 +3,7 @@ vocab:
   path:
     train: datasets/Vietnews-dataset/train.json
     dev: datasets/Vietnews-dataset/dev.json
-    test: datasets/Vietnews-dataset/test.json
+    test: datasets/Wikilingual-dataset/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
