@@ -9,7 +9,6 @@ from transformers import PretrainedConfig
 from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
 
-# Import the sliding chunks functions (assuming they exist in your codebase)
 from .sliding_chunks import sliding_chunks_matmul_qk, sliding_chunks_matmul_pv
 from .diagonaled_mm_tvm import diagonaled_mm as diagonaled_mm_tvm, mask_invalid_locations
 
