@@ -1,9 +1,9 @@
 vocab:
   type: Vocab
   path:
-    train: /kaggle/input/vipholm-testing/Wikilingual-dataset/train.json
-    dev: /kaggle/input/vipholm-testing/Wikilingual-dataset/dev.json
-    test: /kaggle/input/vipholm-testing/Wikilingual-dataset/test.json
+    train: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+    dev: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
+    test: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
@@ -13,13 +13,13 @@ vocab:
 dataset:
   train:
     type: TextSumDatasetOOV
-    path: /kaggle/input/vipholm-testing/Wikilingual-dataset/train.json
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
   dev:
     type: TextSumDatasetOOV
-    path: /kaggle/input/vipholm-testing/Wikilingual-dataset/dev.json
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
   test:
     type: TextSumDatasetOOV
-    path: /kaggle/input/vipholm-testing/Wikilingual-dataset/test.json
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
   batch_size: 8
   num_workers: 4
 
