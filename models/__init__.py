@@ -5,7 +5,7 @@ from .gru.gru import GRU_Model
 from .AbstractiveTXModel.AbstractiveTXModel import AbstractiveTXModel
 from .pointer_generator.pointer_generator import PointerGenerator
 from .transformer.transformer import TransformerModel
-from .closedbook.closedbook import ClosedBookModel
+from .closedbook.closedbook import ClosedbookSummarization
 # from .transformer_hepos.model.transformer_hepos import TransformerHeposModel
 # from .transformer_seal.model.transformer_seal import TransformerSealModel
 # from .seal_closedbook.seal_closedbook import ClosedbookSeal

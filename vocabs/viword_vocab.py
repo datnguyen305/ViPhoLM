@@ -58,27 +58,18 @@ class ViWordVocab(Vocab):
             for key in data:
                 item = data[key]
                 
-                # --- SỬA ĐOẠN NÀY ---
                 
-                # 1. Xử lý SOURCE (Văn bản gốc)
-                # Dữ liệu source là Dict -> Cần nối lại thành String
                 raw_source = item["source"]
                 if isinstance(raw_source, dict):
-                    # Logic giống hệt trong ViTextSumDataset
                     paragraphs = [" ".join(p) for _, p in raw_source.items()]
                     source_text = " ".join(paragraphs)
                 else:
-                    # Phòng trường hợp nó đã là string
                     source_text = str(raw_source)
 
-                # 2. Xử lý TARGET (Tóm tắt) - QUAN TRỌNG
-                # Bạn cũng cần từ vựng của phần tóm tắt để Decoder học
                 target_text = item.get("target", "")
                 
-                # 3. Gộp cả hai để quét từ vựng
                 full_text = source_text + " " + target_text
                 
-                # --------------------
 
                 words = preprocess_sentence(full_text)
                 

@@ -108,3 +108,4 @@ class LSTM_Model(nn.Module):
         outputs = torch.cat(outputs, dim=1)
         
         return outputs
+    

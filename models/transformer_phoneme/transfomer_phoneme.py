@@ -51,6 +51,8 @@ class Transformer_Phoneme_Model(nn.Module):
 
         # --- QUAN TRỌNG: OUTPUT LAYER ---
         # Thay vì 1 Linear layer, ta dùng 4 Linear layer để dự đoán 4 thành phần riêng biệt
+
+        # Thay vì dùng 4 linear layer, thì tại sao không dùng feedforward network với nhiều lớp hơn? Thử 
         self.fc_onset = nn.Linear(config.d_model, vocab.vocab_size)
         self.fc_medial = nn.Linear(config.d_model, vocab.vocab_size)
         self.fc_nucleus = nn.Linear(config.d_model, vocab.vocab_size)
