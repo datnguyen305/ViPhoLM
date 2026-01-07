@@ -187,7 +187,13 @@ class ClosedbookSummarization(PointerGenerator):
         # Loss
         probs_masks = torch.ne(output_target_idx, self.padding_token_idx)
 
-        gold_probs = torch.gather(vocab_dists, 2, output_target_idx.unsqueeze(2)).squeeze(2)  + torch.gather(closedbook_dists, 2, output_target_idx.unsqueeze(2)).squeeze(2)  # B x dec_len
+        closedbook_target_idx = output_target_idx.clone()
+        closedbook_target_idx[closedbook_target_idx >= self.max_vocab_size] = self.unknown_token_idx
+
+        prob_vocab = torch.gather(vocab_dists, 2, output_target_idx.unsqueeze(2)).squeeze(2)
+        prob_closed = torch.gather(closedbook_dists, 2, closedbook_target_idx.unsqueeze(2)).squeeze(2)
+
+        gold_probs = prob_vocab + prob_closed
         nll_loss = -torch.log(gold_probs + 1e-12)
         if self.is_coverage:
             coverage_loss = torch.sum(torch.min(kwargs['attn_dists'], kwargs['coverages']), dim=2)  # B x dec_len
