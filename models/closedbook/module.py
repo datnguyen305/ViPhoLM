@@ -167,6 +167,7 @@ class ClosedbookDecoder(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super(ClosedbookDecoder, self).__init__()
 
+        # Chỉ là một LSTM thuần túy
         self.decoder = nn.LSTM(
             config.embedding_size, 
             config.hidden_size, 
@@ -174,85 +175,19 @@ class ClosedbookDecoder(nn.Module):
             batch_first=True, 
             dropout=0
         )
+        # Tầng tuyến tính dự đoán từ vựng gốc (không có OOV)
         self.vocab_linear = nn.Linear(config.hidden_size, vocab.vocab_size)
 
-        self.is_attention = config.is_attention_closedbook
-        self.is_pgen = config.is_pgen and config.is_attention_closedbook
-        self.is_coverage = config.is_coverage and config.is_attention_closedbook
-
-        context_size = config.hidden_size
-
-        if self.is_attention:
-            self.x_context = nn.Linear(config.embedding_size + context_size, config.embedding_size)
-            self.attention = Attention(context_size, config.hidden_size, config.is_coverage)
-            self.attention_dense = nn.Linear(config.hidden_size + context_size, config.hidden_size)
-
-        if self.is_pgen:
-            self.p_gen_linear = nn.Linear(context_size + config.hidden_size + config.embedding_size, 1)
-
-    def forward(self, input_embeddings, decoder_hidden_states, kwargs=None):
-        if not self.is_attention:
-            decoder_outputs, decoder_hidden_states = self.decoder(input_embeddings, decoder_hidden_states)
-            vocab_dists = F.softmax(self.vocab_linear(decoder_outputs), dim=-1)
-            return vocab_dists, decoder_hidden_states, kwargs
-
-        else:
-            vocab_dists = []
-            encoder_outputs = kwargs['encoder_outputs']
-            encoder_masks = kwargs['encoder_masks']
-            context = kwargs['context']
-
-            extra_zeros = None
-            extended_source_idx = None
-            if self.is_pgen:
-                extra_zeros = kwargs['extra_zeros']
-                extended_source_idx = kwargs['extended_source_idx']
-
-            coverage = None
-            if self.is_coverage:
-                coverage = kwargs['coverages']
-                coverages = []
-                attn_dists = []
-
-        dec_length = input_embeddings.size(1)
-
-        for step in range(dec_length):
-            step_input_embeddings = input_embeddings[:, step, :].unsqueeze(1)  # B x 1 x 128
-
-            x = self.x_context(torch.cat((step_input_embeddings, context), dim=-1))  # B x 1 x 128
-
-            decoder_outputs, decoder_hidden_states = self.decoder(x, decoder_hidden_states)  # B x 1 x 256
-
-            context, attn_dist, coverage = self.attention(decoder_outputs, encoder_outputs,
-                                                          encoder_masks, coverage)  # B x 1 x src_len
-
-            vocab_logits = self.vocab_linear(self.attention_dense(torch.cat((decoder_outputs, context), dim=-1)))
-            vocab_dist = F.softmax(vocab_logits, dim=-1)  # B x 1 x vocab_size
-
-            if self.is_pgen:
-                p_gen_input = torch.cat((context, decoder_outputs, x), dim=-1)  # B x 1 x (256 + 256 + 128)
-                p_gen = torch.sigmoid(self.p_gen_linear(p_gen_input))  # B x 1 x 1
-                attn_dist_ = (1 - p_gen) * attn_dist  # B x 1 x src_len
-
-                # B x 1 x (vocab_size+max_oovs_num)
-                extended_vocab_dist = torch.cat(((vocab_dist * p_gen), extra_zeros.unsqueeze(1)), dim=-1)
-
-                vocab_dist = extended_vocab_dist.scatter_add(2, extended_source_idx.unsqueeze(1), attn_dist_)
-
-            if self.is_coverage:
-                attn_dists.append(attn_dist)
-                coverages.append(coverage)
-
-            vocab_dists.append(vocab_dist)
-
-        vocab_dists = torch.cat(vocab_dists, dim=1)  # B x dec_len x vocab_size+(max_oovs_num)
-
-        kwargs['context'] = context
-
-        if self.is_coverage:
-            coverages = torch.cat(coverages, dim=1)  # B x dec_len x src_len
-            attn_dists = torch.cat(attn_dists, dim=1)  # B x dec_len x src_len
-            kwargs['attn_dists'] = attn_dists
-            kwargs['coverages'] = coverages
-
-        return vocab_dists, decoder_hidden_states, kwargs
+    def forward(self, input_embeddings, decoder_hidden_states):
+        """
+        Input_embeddings: Đã được map OOV -> UNK từ bên ngoài (file closedbook.py)
+        decoder_hidden_states: Chính là vector ct từ Encoder truyền sang
+        """
+        # Không dùng Attention, không dùng Context
+        decoder_outputs, decoder_hidden_states = self.decoder(input_embeddings, decoder_hidden_states)
+        
+        # Dự đoán phân phối từ vựng dựa thuần túy trên trạng thái nội tại (memory state)
+        vocab_logits = self.vocab_linear(decoder_outputs)
+        vocab_dists = F.softmax(vocab_logits, dim=-1)
+        
+        return vocab_dists, decoder_hidden_states

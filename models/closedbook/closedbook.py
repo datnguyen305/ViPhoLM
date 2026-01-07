@@ -181,7 +181,7 @@ class ClosedbookSummarization(PointerGenerator):
         vocab_dists, _, kwargs = self.decoder(
             input_embeddings, encoder_hidden_states, kwargs=kwargs
         )
-        closedbook_dists,_, kwargs_closedbook = self.closedbook_decoder(
+        closedbook_dists, _ = self.closedbook_decoder(
             input_embeddings, encoder_hidden_states
         )
         # Loss
