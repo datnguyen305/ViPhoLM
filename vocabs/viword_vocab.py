@@ -16,7 +16,7 @@ class ViWordVocab(Vocab):
 
         self.initialize_special_tokens(config)
         
-        phonemes = self.make_vocab(config.JSON_PATH)
+        phonemes = self.make_vocab(config)
         phonemes = list(phonemes)
         self.itos = {
             i: tok for i, tok in enumerate(self.specials + phonemes)
@@ -30,19 +30,20 @@ class ViWordVocab(Vocab):
         self.specials = [self.padding_token]
 
     def initialize_special_tokens(self, config) -> None:
-        self.padding_token = config.PAD_TOKEN
-        self.bos_token = config.BOS_TOKEN
-        self.eos_token = config.EOS_TOKEN
-        self.unk_token = config.UNK_TOKEN
+        self.padding_token = config.pad_token
+        self.bos_token = config.bos_token
+        self.eos_token = config.eos_token
+        self.unk_token = config.unk_token
         
         self.specials = [self.padding_token, self.bos_token, self.eos_token, self.unk_token]
 
-        self.padding_idx = 0
+        self.pad_idx = 0
         self.bos_idx = 1
         self.eos_idx = 2
         self.unk_idx = 3
 
     def make_vocab(self, config):
+        # Lấy list đường dẫn từ config (Đã sửa ở bước trước)
         json_paths = [config.TRAIN, config.DEV, config.TEST]
         phonemes = set()
 
@@ -50,13 +51,37 @@ class ViWordVocab(Vocab):
         for path in json_paths:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"JSON path not found: {path}")
+            
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             for key in data:
                 item = data[key]
-                caption = item["caption"]
-                words = preprocess_sentence(caption)
+                
+                # --- SỬA ĐOẠN NÀY ---
+                
+                # 1. Xử lý SOURCE (Văn bản gốc)
+                # Dữ liệu source là Dict -> Cần nối lại thành String
+                raw_source = item["source"]
+                if isinstance(raw_source, dict):
+                    # Logic giống hệt trong ViTextSumDataset
+                    paragraphs = [" ".join(p) for _, p in raw_source.items()]
+                    source_text = " ".join(paragraphs)
+                else:
+                    # Phòng trường hợp nó đã là string
+                    source_text = str(raw_source)
+
+                # 2. Xử lý TARGET (Tóm tắt) - QUAN TRỌNG
+                # Bạn cũng cần từ vựng của phần tóm tắt để Decoder học
+                target_text = item.get("target", "")
+                
+                # 3. Gộp cả hai để quét từ vựng
+                full_text = source_text + " " + target_text
+                
+                # --------------------
+
+                words = preprocess_sentence(full_text)
+                
                 for word in words:
                     components = analyze_Vietnamese(word)
                     if components:
@@ -66,21 +91,21 @@ class ViWordVocab(Vocab):
 
     def encode_caption(self, caption: List[str]) -> torch.Tensor:
         syllables = [
-            (self.bos_idx, self.padding_idx, self.padding_idx, self.padding_idx)
+            (self.bos_idx, self.pad_idx, self.pad_idx, self.pad_idx)
         ]
         for word in caption:
             components = analyze_Vietnamese(word)
             if components:
                 syllables.append([
-                    self.stoi[phoneme] if phoneme else self.padding_idx for phoneme in components
+                    self.stoi[phoneme] if phoneme else self.pad_idx for phoneme in components
                 ])
             else:
                 syllables.append(
-                    (self.unk_idx, self.padding_idx, self.padding_idx, self.padding_idx)
+                    (self.unk_idx, self.pad_idx, self.pad_idx, self.pad_idx)
                 )
 
         syllables.append(
-            (self.eos_idx, self.padding_idx, self.padding_idx, self.padding_idx)
+            (self.eos_idx, self.pad_idx, self.pad_idx, self.pad_idx)
         )
 
         vec = torch.tensor(syllables).long()

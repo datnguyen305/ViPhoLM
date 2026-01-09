@@ -4,6 +4,7 @@ from utils.instance import Instance, InstanceList
 from .text_sum_dataset import TextSumDataset
 from .text_sum_dataset_hierarchical import TextSumDatasetHierarchical   
 from .text_sum_dataset_oov import TextSumDatasetOOV
+from .text_sum_dataset_phoneme import TextSumDatasetPhoneme
 import torch
 from torch.nn.utils.rnn import pad_sequence
 

@@ -2,11 +2,11 @@ vocab:
   type: ViWordVocab
   # --- SỬA ĐỂ KHỚP VỚI ViWordVocab CODE ---
   # Code gọi config.TRAIN nên phải khai báo trực tiếp ở đây, không lồng trong "path"
-  TRAIN: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/train.json
-  DEV: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/dev.json
-  TEST: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/test.json
+  TRAIN: datasets/Wikilingual-dataset/train.json
+  DEV: datasets/Wikilingual-dataset/dev.json
+  TEST: datasets/Wikilingual-dataset/test.json
   # Code __init__ gọi make_vocab(config.JSON_PATH)
-  JSON_PATH: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/train.json
+  JSON_PATH: datasets/Wikilingual-dataset/train.json
   TOKENIZER: null # Nếu không dùng tokenizer ngoài thì để null
   
   min_freq: 3
@@ -18,13 +18,13 @@ vocab:
 dataset:
   train: 
     type: TextSumDatasetPhoneme # Đảm bảo tên class Dataset trong code là TextSumDatasetPhoneme
-    path: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/train.json
+    path: datasets/Wikilingual-dataset/train.json
   dev:
     type: TextSumDatasetPhoneme
-    path: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/dev.json
+    path: datasets/Wikilingual-dataset/dev.json
   test: 
     type: TextSumDatasetPhoneme
-    path: /kaggle/input/mynlpdataset/datasets/Wikilingual-dataset/test.json
+    path: datasets/Wikilingual-dataset/test.json
   batch_size: 16
   num_workers: 4
 
@@ -55,7 +55,6 @@ model:
 
 training:
   checkpoint_path: "checkpoints"
-  # QUAN TRỌNG: Giảm LR xuống. 0.15 là quá lớn cho Transformer, sẽ gây lỗi.
   learning_rate: 1 
   lr_coverage: 0.15
   warmup: 4000

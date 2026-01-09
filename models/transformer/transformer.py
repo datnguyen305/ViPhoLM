@@ -1,7 +1,29 @@
 import torch
 from torch import nn
+import math
 from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super().__init__()
+        
+        # Create positional encoding matrix
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        
+        # Register as buffer (not a parameter, but part of state)
+        self.register_buffer('pe', pe)
+    
+    def forward(self, x):
+        # x shape: [B, L, D]
+        seq_len = x.size(1)
+        return self.pe[:seq_len, :].unsqueeze(0)  # [1, L, D]
 
 
 @META_ARCHITECTURE.register()
@@ -19,13 +41,17 @@ class TransformerModel(nn.Module):
         self.config = config
         self.vocab = vocab
 
+        self.MAX_LENGTH = vocab.max_sentence_length + 2
+
         # Embedding
         self.src_embedding = nn.Embedding(vocab.vocab_size, config.d_model, padding_idx=self.src_pad_idx)
         self.trg_embedding = nn.Embedding(vocab.vocab_size, config.d_model, padding_idx=self.trg_pad_idx)
 
         # Positional encoding
-        self.pos_encoder = nn.Embedding(config.max_len, config.d_model)
-        self.pos_decoder = nn.Embedding(config.max_len, config.d_model)
+        self.pos_encoding = PositionalEncoding(config.d_model, config.max_len)
+        
+        # Dropout for embeddings
+        self.dropout = nn.Dropout(config.drop_prob)
 
         # Encoder
         encoder_layer = nn.TransformerEncoderLayer(
@@ -50,7 +76,7 @@ class TransformerModel(nn.Module):
         # Output projection
         self.output_layer = nn.Linear(config.d_model, vocab.vocab_size)
 
-        self.loss = nn.CrossEntropyLoss(ignore_index=self.trg_pad_idx)
+        self.loss = nn.CrossEntropyLoss(label_smoothing=0.1, ignore_index=self.trg_pad_idx)
 
 
     # ------------------------- MASKS -------------------------
@@ -85,16 +111,17 @@ class TransformerModel(nn.Module):
         src_key_padding = self.make_src_padding_mask(src)
         tgt_padding, tgt_causal = self.make_tgt_mask(tgt_input)
 
-        # Positional encoding - create for actual sequence length
-        B = src.size(0)
-        src_len = src.size(1)
-        tgt_len = tgt_input.size(1)
-        
-        src_pos = self.pos_encoder(torch.arange(src_len, device=src.device)).unsqueeze(0)
-        tgt_pos = self.pos_decoder(torch.arange(tgt_len, device=tgt_input.device)).unsqueeze(0)
+        # Embedding + Positional encoding
+        src_emb = self.src_embedding(src) * math.sqrt(self.d_model)
+        tgt_emb = self.trg_embedding(tgt_input) * math.sqrt(self.d_model)
 
-        enc_input = self.src_embedding(src) + src_pos
-        dec_input = self.trg_embedding(tgt_input) + tgt_pos
+        
+        src_pos = self.pos_encoding(src_emb)
+        tgt_pos = self.pos_encoding(tgt_emb)
+
+        
+        enc_input = self.dropout(src_emb + src_pos)
+        dec_input = self.dropout(tgt_emb + tgt_pos)
 
         # Encoder
         memory = self.encoder(
@@ -126,16 +153,13 @@ class TransformerModel(nn.Module):
         src = src[:, :config.max_len]
         src_key_padding = self.make_src_padding_mask(src)
     
-        # Positional encoding for source
+        # Embedding + Positional encoding
         B = src.size(0)
-        src_len = src.size(1)
+        src_emb = self.src_embedding(src) * math.sqrt(self.d_model)
+        src_pos = self.pos_encoding(src_emb)
+        enc_input = src_emb + src_pos
         
-        # No need to expand, broadcasting handles it
-        src_pos = self.pos_encoder(torch.arange(src_len, device=src.device)).unsqueeze(0)
-    
-        enc_input = self.src_embedding(src) + src_pos
-        
-        # use no_grad for inference
+        # Use no_grad for inference
         with torch.no_grad():
             memory = self.encoder(enc_input, src_key_padding_mask=src_key_padding)
         
@@ -143,14 +167,13 @@ class TransformerModel(nn.Module):
             tgt_seq = torch.full((B, 1), self.trg_bos_idx, device=src.device, dtype=torch.long)
             finished = torch.zeros(B, dtype=torch.bool, device=src.device)
         
-            for _ in range(config.max_len):
-                tgt_len = tgt_seq.size(1)
+            for _ in range(self.MAX_LENGTH):
                 tgt_padding, tgt_causal = self.make_tgt_mask(tgt_seq)
         
-                # Create positional encoding for current length
-                tgt_pos = self.pos_decoder(torch.arange(tgt_len, device=src.device)).unsqueeze(0)
-        
-                dec_input = self.trg_embedding(tgt_seq) + tgt_pos
+                # Embedding + Positional encoding
+                tgt_emb = self.trg_embedding(tgt_seq) * math.sqrt(self.d_model)
+                tgt_pos = self.pos_encoding(tgt_emb)
+                dec_input = tgt_emb + tgt_pos
         
                 dec_out = self.decoder(
                     dec_input,
@@ -173,4 +196,4 @@ class TransformerModel(nn.Module):
                 if finished.all():
                     break
         
-        return tgt_seq[:, 1:]   # remove BOS
+        return tgt_seq[:, 1:]  # Remove BOS
