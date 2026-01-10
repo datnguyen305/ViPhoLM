@@ -25,28 +25,38 @@ dataset:
   num_workers: 8
 
 model:
-  name: HEPOS_Baseline_Wikilingual      # Tên checkpoint để dễ nhận biết
-  architecture: HEPOSBaselineSummarizer # Tên lớp wrapper đã đăng ký với META_ARCHITECTURE
-  d_model: 1024                     # Kích thước embedding (BART-large dùng 1024)
-  num_heads: 16                     # Số lượng attention heads (BART-large dùng 16)
-  num_encoder_layers: 12            # Số lớp Encoder (BART-large dùng 12)
-  num_decoder_layers: 12            # Số lớp Decoder (BART-large dùng 12)
-  dropout: 0.1
-  attention_dropout: 0.1            # Thêm tham số này để kiểm soát attention dropout
-  max_src_len: 4096                 # Độ dài tối đa cho văn bản nguồn
-  max_tgt_len: 100                  # Giữ nguyên độ dài tối đa cho tóm tắt đích
-  sinkhorn_bucket_size: 64          # Kích thước bucket cho Sinkhorn Attention (Encoder)
-  hepos_stride_size: 4              # Kích thước bước nhảy cho HEPOS (Decoder)
-  label_smoothing: 0.1
-  device: cpu
+  name: HEPOS_Wikilingual
+  architecture: HEPOSBaselineSummarizer
+  
+  encoder:
+    d_model: 512
+    n_layers: 6
+    n_head: 8
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    max_len: 128
+
+  decoder:
+    d_model: 512
+    n_layers: 6
+    n_head: 8
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    max_len: 128
+    stride: 8   # = n_head (khuyến nghị paper)
+
+  device: cuda
 
 training:
   checkpoint_path: "checkpoints"
-  warmup: 1000
+  warmup: 8000
   patience: 5
   score: rouge-L
-  batch_size: 32
+  batch_size: 4
+  gradient_accumulation_steps: 8   # batch effective = 32
   learning_rate: 0.0001
   epochs: 20
+  beam_size: 4
+  length_penalty: 2.0
 
 task: TextSumTask

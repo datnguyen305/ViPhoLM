@@ -33,7 +33,7 @@ dataset:
   num_workers: 8
 
 model:
-  name: seneca_baseline_wikilingual
+  name: Seneca_Vietnews
   architecture: SENECA_Baseline
   d_model: 128
   hidden_dim: 256
