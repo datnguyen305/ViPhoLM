@@ -89,7 +89,7 @@ def a2c_train_step(agent, abstractor, loader, opt, grad_fn,
     reward = torch.Tensor(rewards).to(baselines[0].device)
     reward = (reward - reward.mean()) / (
         reward.std() + float(np.finfo(np.float32).eps))
-    baseline = torch.cat(baselines).squeeze()
+    baseline = torch.stack(baselines).squeeze()
     avg_advantage = 0
     losses = []
     for action, p, r, b in zip(indices, probs, reward, baseline):
@@ -99,10 +99,15 @@ def a2c_train_step(agent, abstractor, loader, opt, grad_fn,
                       * (advantage/len(indices))) # divide by T*B
     critic_loss = F.mse_loss(baseline, reward)
     # backprop and update
-    autograd.backward(
-        [critic_loss] + losses,
-        [torch.ones(1).to(critic_loss.device)]*(1+len(losses))
-    )
+    # 1. Combine all loss components into a single list
+    all_losses = [critic_loss] + losses
+
+    # 2. Dynamically create gradients that match each loss shape perfectly
+    # This handles both scalars [] and 1D tensors [1] automatically
+    grad_tensors = [torch.ones_like(loss) for loss in all_losses]
+
+    # 3. Perform the backward pass
+    torch.autograd.backward(all_losses, grad_tensors)
     grad_log = grad_fn()
     opt.step()
     log_dict = {}

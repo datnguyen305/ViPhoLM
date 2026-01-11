@@ -9,7 +9,7 @@ from utils import count_data
 from decoding import make_html_safe
 
 try:
-    DATA_DIR = ".\data"
+    DATA_DIR = os.environ['OF_DATA']
 except KeyError:
     print('please use environment variable to specify data directories')
 
@@ -25,7 +25,7 @@ def dump(split):
               end='')
         with open(join(data_dir, '{}.json'.format(i))) as f:
             data = json.loads(f.read())
-        abs_sents = data['abstract']
+        abs_sents = data['target']
         with open(join(dump_dir, '{}.ref'.format(i)), 'w') as f:
             f.write(make_html_safe('\n'.join(abs_sents)))
     print('finished in {}'.format(timedelta(seconds=time()-start)))

@@ -19,7 +19,7 @@ from data.data import CnnDmDataset
 
 
 try:
-    DATASET_DIR = os.environ['DATA']
+    DATASET_DIR = os.environ['OF_DATA']
 except KeyError:
     print('please use environment variable to specify data directories')
 
@@ -31,7 +31,7 @@ class DecodeDataset(CnnDmDataset):
 
     def __getitem__(self, i):
         js_data = super().__getitem__(i)
-        art_sents = js_data['article']
+        art_sents = js_data['source']
         return art_sents
 
 

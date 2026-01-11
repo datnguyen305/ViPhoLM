@@ -8,7 +8,7 @@ from evaluate import eval_meteor, eval_rouge
 
 
 try:
-    _DATA_DIR = os.environ['DATA']
+    _DATA_DIR = os.environ['OF_DATA']
 except KeyError:
     print('please use environment variable to specify data directories')
 

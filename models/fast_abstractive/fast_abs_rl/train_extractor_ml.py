@@ -44,7 +44,7 @@ class ExtractDataset(CnnDmDataset):
 
     def __getitem__(self, i):
         js_data = super().__getitem__(i)
-        art_sents, extracts = js_data['article'], js_data['extracted']
+        art_sents, extracts = js_data['source'], js_data['extracted']
         return art_sents, extracts
 
 
@@ -71,7 +71,7 @@ def build_batchers(net_type, word2id, cuda, debug):
                                       single_run=False, fork=not debug)
 
     val_loader = DataLoader(
-        ExtractDataset('val'), batch_size=BUCKET_SIZE,
+        ExtractDataset('dev'), batch_size=BUCKET_SIZE,
         shuffle=False, num_workers=4 if cuda and not debug else 0,
         collate_fn=coll_fn_extract
     )
@@ -162,7 +162,7 @@ def main(args):
     val_fn = basic_validate(net, criterion)
     grad_fn = get_basic_grad_fn(net, args.clip)
     optimizer = optim.Adam(net.parameters(), **train_params['optimizer'][1])
-    scheduler = ReduceLROnPlateau(optimizer, 'min', verbose=True,
+    scheduler = ReduceLROnPlateau(optimizer, 'min',
                                   factor=args.decay, min_lr=0,
                                   patience=args.lr_p)
 

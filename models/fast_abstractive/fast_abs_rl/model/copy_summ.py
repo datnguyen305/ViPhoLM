@@ -199,9 +199,9 @@ class CopyLSTMDecoder(AttentionalLSTMDecoder):
         lp = torch.log(
             ((-copy_prob + 1) * gen_prob
             ).scatter_add(
-                dim=1,
-                index=extend_src.expand_as(score),
-                source=score * copy_prob
+                1,
+                extend_src.expand_as(score),
+                score * copy_prob
         ) + 1e-8)  # numerical stability for log
         return lp, (states, dec_out), score
 

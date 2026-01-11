@@ -31,7 +31,7 @@ from metric import compute_rouge_l, compute_rouge_n
 MAX_ABS_LEN = 30
 
 try:
-    DATA_DIR = os.environ['DATA']
+    DATA_DIR = os.environ['OF_DATA']
 except KeyError:
     print('please use environment variable to specify data directories')
 
@@ -43,8 +43,8 @@ class RLDataset(CnnDmDataset):
 
     def __getitem__(self, i):
         js_data = super().__getitem__(i)
-        art_sents = js_data['article']
-        abs_sents = js_data['abstract']
+        art_sents = js_data['source']
+        abs_sents = js_data['target']
         return art_sents, abs_sents
 
 def load_ext_net(ext_dir):
@@ -113,7 +113,7 @@ def build_batchers(batch_size):
         collate_fn=coll
     )
     val_loader = DataLoader(
-        RLDataset('val'), batch_size=batch_size,
+        RLDataset('dev'), batch_size=batch_size,
         shuffle=False, num_workers=4,
         collate_fn=coll
     )
@@ -164,7 +164,7 @@ def train(args):
     # prepare trainer
     grad_fn = get_grad_fn(agent, args.clip)
     optimizer = optim.Adam(agent.parameters(), **train_params['optimizer'][1])
-    scheduler = ReduceLROnPlateau(optimizer, 'max', verbose=True,
+    scheduler = ReduceLROnPlateau(optimizer, 'max',
                                   factor=args.decay, min_lr=0,
                                   patience=args.lr_p)
 

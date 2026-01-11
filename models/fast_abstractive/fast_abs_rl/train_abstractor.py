@@ -31,7 +31,7 @@ from utils import make_vocab, make_embedding
 BUCKET_SIZE = 6400
 
 try:
-    OF_DATA_DIR = os.environ.get('DATA', './data')
+    OF_DATA_DIR = os.environ.get('OF_DATA', './data')
 except KeyError:
     print('please use environment variable to specify data directories')
     
@@ -101,7 +101,7 @@ def build_batchers(word2id, cuda, debug):
                                       single_run=False, fork=not debug)
 
     val_loader = DataLoader(
-        MatchDataset('val'), batch_size=BUCKET_SIZE,
+        MatchDataset('dev'), batch_size=BUCKET_SIZE,
         shuffle=False, num_workers=4 if cuda and not debug else 0,
         collate_fn=coll_fn
     )
@@ -149,7 +149,7 @@ def main(args):
     val_fn = basic_validate(net, criterion)
     grad_fn = get_basic_grad_fn(net, args.clip)
     optimizer = optim.Adam(net.parameters(), **train_params['optimizer'][1])
-    scheduler = ReduceLROnPlateau(optimizer, 'min', verbose=True,
+    scheduler = ReduceLROnPlateau(optimizer, 'min',
                                   factor=args.decay, min_lr=0,
                                   patience=args.lr_p)
 

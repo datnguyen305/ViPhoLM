@@ -7,10 +7,7 @@ echo "--- W2V ---"
 mkdir -p models/fast_abstractive/fast_abs_rl
 
 # Download
-gdown --id 1MPDzUzr7viJU4-MERmX900gZWZPGzs-u \
-      -O models/fast_abstractive/fast_abs_rl/word2vec_vi_words_100dims.zip
+gdown --id 1MPDzUzr7viJU4-MERmX900gZWZPGzs-u
 
 echo "--- Unzip ---"
-cd models/fast_abstractive/fast_abs_rl
-
-unzip -o word2vec_vi_words_100dims.zip
+unzip word2vec_vi_words_100dims.zip

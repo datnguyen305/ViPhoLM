@@ -167,7 +167,7 @@ class PtrScorer(nn.Module):
                                             self._hop_v, self._hop_wq)
             output = PtrScorer.attention(
                 attn_mem, attn_feat, query, self._attn_v, self._attn_wq)
-            score = self._score_linear(output)
+            score = self._score_linear(output).squeeze()
             scores.append(score)
             lstm_in = output
         return scores
