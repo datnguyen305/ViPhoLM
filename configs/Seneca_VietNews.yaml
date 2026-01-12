@@ -2,9 +2,9 @@
 vocab:
   type: Vocab
   path:
-    train: datasets/VietNews-dataset/train.json
-    dev: datasets/VietNews-dataset/dev.json
-    test: datasets/VietNews-dataset/test.json
+    train: datasets/Vietnews-dataset/train.json
+    dev: datasets/Vietnews-dataset/dev.json
+    test: datasets/Vietnews-dataset/test.json
   min_freq: 3
   bos_token: <bos>
   eos_token: <eos>
@@ -16,17 +16,17 @@ vocab:
 dataset:
   train: 
     type: TextSumDatasetSeneca
-    path: datasets/VietNews-dataset/train.json
+    path: datasets/Vietnews-dataset/train.json
     max_sent: 30
     max_sent_len: 50
   dev:
     type: TextSumDatasetSeneca
-    path: datasets/VietNews-dataset/dev.json
+    path: datasets/Vietnews-dataset/dev.json
     max_sent: 30
     max_sent_len: 50
   test: 
     type: TextSumDatasetSeneca
-    path: datasets/VietNews-dataset/test.json
+    path: datasets/Vietnews-dataset/test.json
     max_sent: 30
     max_sent_len: 50
   batch_size: 32
