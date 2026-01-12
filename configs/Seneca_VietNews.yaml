@@ -15,17 +15,17 @@ vocab:
 
 dataset:
   train: 
-    type: TextSumDataset
+    type: TextSumDatasetSeneca
     path: datasets/VietNews-dataset/train.json
     max_sent: 30
     max_sent_len: 50
   dev:
-    type: TextSumDataset
+    type: TextSumDatasetSeneca
     path: datasets/VietNews-dataset/dev.json
     max_sent: 30
     max_sent_len: 50
   test: 
-    type: TextSumDataset
+    type: TextSumDatasetSeneca
     path: datasets/VietNews-dataset/test.json
     max_sent: 30
     max_sent_len: 50
