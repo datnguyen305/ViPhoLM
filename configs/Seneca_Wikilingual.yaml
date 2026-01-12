@@ -1,4 +1,3 @@
-
 vocab:
   type: Vocab
   path:
@@ -10,39 +9,53 @@ vocab:
   eos_token: <eos>
   unk_token: <unk>
   pad_token: <pad>
+  extra_tokens:
+    - <MENT>
 
 dataset:
-  train: 
-    type: TextSumDataset
+  train:
+    type: TextSumDatasetSeneca
     path: datasets/Wikilingual-dataset/train.json
+    max_sent: 30
+    max_sent_len: 50
   dev:
-    type: TextSumDataset
+    type: TextSumDatasetSeneca
     path: datasets/Wikilingual-dataset/dev.json
-  test: 
-    type: TextSumDataset
+    max_sent: 30
+    max_sent_len: 50
+  test:
+    type: TextSumDatasetSeneca
     path: datasets/Wikilingual-dataset/test.json
+    max_sent: 30
+    max_sent_len: 50
+
   batch_size: 32
   num_workers: 8
 
 model:
-  name: SENECASummarizer
-  architecture: SENECASummarizer
-  d_model: 512
-  num_heads: 8
-  num_layers: 3
-  num_entity_types: 50  # Số loại thực thể
+  name: Seneca_Wikilingual
+  architecture: SENECA_Baseline
+  d_model: 128
+  hidden_dim: 256
   dropout: 0.1
-  max_tgt_len: 100
-  teacher_forcing: True
-  use_coherence_reward: True
+  use_selector: true
+  use_copy: true
+  use_coverage: false
+  max_extract: 5
+  max_tgt_len: 128
+  device: cuda
 
 training:
-  batch_size: 32
-  lr: 1e-4
-  rl_weight: 0.5  # Trọng số cho RL loss
-  checkpoint_path: "checkpoints"
-  warmup: 1000
+  optimizer: adam
+  learning_rate: 0.0005
+  betas: [0.9, 0.999]
+  scheduler: none
+  epochs: 20
+  warmup: 0
   patience: 5
+  grad_clip: 2.0
+  coverage_lambda: 0.0
+  checkpoint_path: checkpoints
   score: rouge-L
 
-task: TextSumTask
+task: TextSumTaskSeneca

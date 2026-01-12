@@ -1,12 +1,12 @@
 from torch.utils.data import Dataset
-import torch
 import json
+
 from builders.dataset_builder import META_DATASET
 from utils.instance import Instance
 from vocabs.vocab import Vocab
 
 @META_DATASET.register()
-class TextSumDatasetHierarchical(Dataset):
+class TextSumDataset_Hierarchical(Dataset):
     def __init__(self, config, vocab: Vocab) -> None:
         super().__init__()
 
@@ -21,7 +21,7 @@ class TextSumDatasetHierarchical(Dataset):
     def __getitem__(self, index: int) -> Instance:
         key = self._keys[index]
         item = self._data[key]
-
+        
         paragraphs = item["source"]
         paragraphs = [" ".join(paragraph) for _, paragraph in paragraphs.items()]
         source = "<nl>".join(paragraphs) # new line mark
