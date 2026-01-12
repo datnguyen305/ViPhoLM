@@ -2,7 +2,7 @@ from .lstm.lstm import LSTM_Model
 from .bilstm.bilstm import BiLSTM_Model
 from .bigru.bigru import BiGRU_Model
 from .gru.gru import GRU_Model
-from .AbstractiveTXModel.AbstractiveTXModel import AbstractiveTXModel
+# from .AbstractiveTXModel.AbstractiveTXModel import AbstractiveTXModel
 from .pointer_generator.pointer_generator import PointerGenerator
 from .transformer.transformer import TransformerModel
 from .closedbook.closedbook import ClosedbookSummarization
