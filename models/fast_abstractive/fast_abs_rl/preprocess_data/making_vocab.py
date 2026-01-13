@@ -17,10 +17,31 @@ if not OG_DATA_DIR or not OF_DATA_DIR:
 
 def simple_tokenize(sentence):
     sentence = sentence.lower()
-    sentence = unicodedata.normalize("NFC", sentence)
-    # Loại bỏ các ký tự đặc biệt và dấu câu, thay bằng khoảng trắng
-    sentence = re.sub(r"[-/“”!\*\&\$\.\?:;,\"'\(\[\]\(\)]", " ", sentence)
+    sentence = unicodedata.normalize("NFD", sentence)
+    sentence = re.sub(r"\s+", " ", sentence)
+    sentence = re.sub(r"!", " ! ", sentence)
+    sentence = re.sub(r"\?", " ? ", sentence)
+    sentence = re.sub(r":", " : ", sentence)
+    sentence = re.sub(r";", " ; ", sentence)
+    sentence = re.sub(r",", " , ", sentence)
+    sentence = re.sub(r"\"", " \" ", sentence)
+    sentence = re.sub(r"'", " ' ", sentence)
+    sentence = re.sub(r"\(", " ( ", sentence)
+    sentence = re.sub(r"\[", " [ ", sentence)
+    sentence = re.sub(r"\)", " ) ", sentence)
+    sentence = re.sub(r"\]", " ] ", sentence)
+    sentence = re.sub(r"/", " / ", sentence)
+    sentence = re.sub(r"\.", " . ", sentence)
+    sentence = re.sub(r"-", " - ", sentence)
+    sentence = re.sub(r"\$", " $ ", sentence)
+    sentence = re.sub(r"\&", " & ", sentence)
+    sentence = re.sub(r"\*", " * ", sentence)
+    sentence = re.sub(r"%", " % ", sentence)
+    sentence = re.sub(r"<nl>", " <nl> ", sentence) # new line mark
+
+    sentence = " ".join(sentence.strip().split()) # remove duplicated spaces
     tokens = sentence.strip().split()
+
     return tokens
 
 def process_and_build():
