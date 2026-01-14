@@ -6,7 +6,7 @@ import json
 from builders.task_builder import META_TASK
 from builders.dataset_builder import build_dataset
 from tasks.base_task import BaseTask
-from data_utils import collate_fn_oov
+from data_utils import hierarchical_collate_fn
 import evaluation
 
 @META_TASK.register()
@@ -32,21 +32,21 @@ class TextSumTaskOOV_v2(BaseTask):
             batch_size=config.dataset.batch_size,
             shuffle=True,
             num_workers=config.dataset.num_workers,
-            collate_fn=collate_fn_oov
+            collate_fn=hierarchical_collate_fn
         )
         self.dev_dataloader = DataLoader(
             dataset=self.dev_dataset,
             batch_size=1,
             shuffle=True,
             num_workers=config.dataset.num_workers,
-            collate_fn=collate_fn_oov
+            collate_fn=hierarchical_collate_fn
         )
         self.test_dataloader = DataLoader(
             dataset=self.test_dataset,
             batch_size=1,
             shuffle=True,
             num_workers=config.dataset.num_workers,
-            collate_fn=collate_fn_oov
+            collate_fn=hierarchical_collate_fn
         )
     
     def get_vocab(self): 
