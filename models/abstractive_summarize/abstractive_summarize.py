@@ -159,11 +159,8 @@ class Decoder(nn.Module):
         self.vocab = vocab
         self.embedding = nn.Embedding(vocab.vocab_size, config.hidden_size)
         
-        # --- SỬA LỖI KÍCH THƯỚC Ở ĐÂY ---
-        # Input thực tế = Embedding (H) + Context (H) = 2H
-        # 512 + 512 = 1024
         self.GRU = nn.GRU(
-            config.hidden_size * 2,  # Đã sửa từ *3 thành *2
+            config.hidden_size * 2, 
             config.hidden_size,
             bidirectional=False,
             num_layers=config.layer_dim, 
@@ -175,10 +172,7 @@ class Decoder(nn.Module):
         self.attention_word = WordLevelAttention(config)
         self.attention_sent = SentenceLevelAttention(config)
         
-        # --- SỬA LỖI KÍCH THƯỚC SELECTOR ---
-        # Input thực tế = Hidden (H) + Embedding (H) + Context (H) = 3H
-        # 512 + 512 + 512 = 1536
-        self.selector = nn.Linear(config.hidden_size * 3, config.hidden_size) # Đã sửa từ *4 thành *3
+        self.selector = nn.Linear(config.hidden_size * 3, config.hidden_size)
         self.v_s = nn.Linear(config.hidden_size, 1)
         
     def forward(self, word_hiddens, sent_hiddens, decoder_initial_states, target, extra_zeros=None, enc_batch_extend_vocab=None):
@@ -211,34 +205,48 @@ class Decoder(nn.Module):
         B, S, _ = sent_hiddens.size()
         curr_state = states[-1]
 
+        # 1. Attention Mechanism
         _, p_a_w = self.attention_word(word_hiddens, curr_state, B, S)
         _, p_a_s = self.attention_sent(sent_hiddens, curr_state)
+        
+        # rescaled_attention có shape (B, S*W) -> tức là (B, Nd)
         rescaled_attention = rescale_attention(p_a_w, p_a_s)
 
+        # 2. Context Vector
         word_hiddens_flat = word_hiddens.reshape(B, S * word_hiddens.size(1), -1)
         context_vector = torch.bmm(rescaled_attention.unsqueeze(1), word_hiddens_flat) 
         
-        rnn_input = torch.cat((output_prev, context_vector), dim=-1) # Kích thước bây giờ là 1024
+        # 3. GRU Step
+        rnn_input = torch.cat((output_prev, context_vector), dim=-1) 
         output, hidden = self.GRU(rnn_input, states)
 
-        # Selector Input: (B, H*3)
+        # 4. P_gen Calculation
         selector_input = torch.cat((hidden[-1], 
             output_prev.squeeze(1), 
             context_vector.squeeze(1)), dim=-1
         ) 
         p_gen = torch.sigmoid(self.v_s(torch.tanh(self.selector(selector_input))))
 
+        # 5. Vocabulary Distribution
         p_vocab = F.softmax(self.out(output), dim=-1) 
         p_vocab_weighted = p_gen.unsqueeze(1) * p_vocab 
 
+        # 6. Pointer Mechanism (SỬA LỖI TẠI ĐÂY)
         if extra_zeros is not None:
             p_vocab_weighted = torch.cat([p_vocab_weighted, extra_zeros], dim=-1)
 
-        p_final = p_vocab_weighted.scatter_add(
-            2, 
-            enc_batch_extend_vocab.unsqueeze(1), 
-            (1 - p_gen).unsqueeze(1) * rescaled_attention.unsqueeze(1)
-        )
+        if enc_batch_extend_vocab is not None:
+            # SỬA LỖI: Flatten index từ (B, S, W) -> (B, S*W) để khớp với rescaled_attention
+            # rescaled_attention đã là (B, Nd)
+            enc_batch_extend_vocab_flat = enc_batch_extend_vocab.reshape(B, -1)
+            
+            p_final = p_vocab_weighted.scatter_add(
+                2, 
+                enc_batch_extend_vocab_flat.unsqueeze(1), # Shape (B, 1, Nd) -> Khớp 3 chiều
+                (1 - p_gen).unsqueeze(1) * rescaled_attention.unsqueeze(1)
+            )
+        else:
+            p_final = p_vocab_weighted
 
         return p_final, hidden, p_gen
 
