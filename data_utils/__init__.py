@@ -2,7 +2,7 @@ from typing import List
 from utils.instance import Instance, InstanceList
 
 from .text_sum_dataset import TextSumDataset
-# from .text_sum_dataset_hierarchical import TextSumDatasetHierarchical   
+from .text_sum_dataset_hierarchical import TextSumDataset_Hierarchical   
 from .text_sum_dataset_oov import TextSumDatasetOOV
 from .text_sum_dataset_seneca import TextSumDatasetSeneca
 import torch
@@ -130,4 +130,34 @@ def collate_fn_seneca(batch):
         "label": labels,
         "id": [x.id for x in batch]
     }
+def hierarchical_collate_fn(batch):
+    # Tìm Max_S (số câu tối đa) và Max_W (số từ tối đa trong 1 câu) trong batch này
+    max_s = max(len(inst.input_features) for inst in batch)
+    max_w = max(max(len(feat['word_ids']) for feat in inst.input_features) for inst in batch)
+    bs = len(batch)
 
+    # Khởi tạo Tensor 3D (B, S, W) cho 4 loại đặc trưng
+    padded_words = torch.zeros(bs, max_s, max_w).long()
+    padded_pos = torch.zeros(bs, max_s, max_w).long()
+    padded_ner = torch.zeros(bs, max_s, max_w).long()
+    padded_tfidf = torch.zeros(bs, max_s, max_w).long()
+
+    for i, inst in enumerate(batch):
+        for j, sent_feat in enumerate(inst.input_features):
+            w_len = len(sent_feat['word_ids'])
+            padded_words[i, j, :w_len] = sent_feat['word_ids']
+            padded_pos[i, j, :w_len] = sent_feat['pos_ids']
+            padded_ner[i, j, :w_len] = sent_feat['ner_ids']
+            padded_tfidf[i, j, :w_len] = sent_feat['tfidf_ids']
+
+    # Pad labels (B, T)
+    labels = [torch.LongTensor(inst.label) for inst in batch]
+    padded_labels = torch.nn.utils.rnn.pad_sequence(labels, batch_first=True)
+
+    return {
+        "input_ids": padded_words,   # Đây chính là (B, S, W)
+        "pos_ids": padded_pos,
+        "ner_ids": padded_ner,
+        "tfidf_ids": padded_tfidf,
+        "labels": padded_labels
+    }
