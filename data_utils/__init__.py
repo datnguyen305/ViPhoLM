@@ -130,13 +130,24 @@ def collate_fn_seneca(batch):
         "label": labels,
         "id": [x.id for x in batch]
     }
-def hierarchical_collate_fn(batch: List[Instance]) -> InstanceList:
+def hierarchical_collate_fn(batch):
+    """
+    Hàm Collate xử lý dữ liệu phân cấp (Hierarchical) và Pointer-Generator.
+    Thay thế hàm cũ đang gây lỗi AttributeError.
+    """
     # 1. Tìm kích thước lớn nhất trong batch (Max sentences, Max words)
+    # Lưu ý: batch là list các Instance trả về từ Dataset
     max_s = max(len(inst.input_features) for inst in batch)
-    max_w = max(max(len(feat['word_ids']) for feat in inst.input_features) for inst in batch)
+    
+    # Tìm max_w (số từ nhiều nhất trong bất kỳ câu nào của batch)
+    max_w = 0
+    for inst in batch:
+        for feat in inst.input_features:
+            max_w = max(max_w, len(feat['word_ids']))
+            
     bs = len(batch)
     
-    # Lấy vocab_size từ instance (đã truyền vào từ Dataset)
+    # Lấy vocab_size từ instance đầu tiên
     vocab_size = batch[0].vocab_size 
 
     # 2. Khởi tạo các Tensor 3D (B, S, W)
@@ -158,35 +169,39 @@ def hierarchical_collate_fn(batch: List[Instance]) -> InstanceList:
         batch_oov_list.append(oovs)
         max_oov_len = max(max_oov_len, len(oovs))
 
+        # FILL DỮ LIỆU TỪ INPUT_FEATURES (Đây là chỗ bạn bị lỗi trước đó)
         for j, sent_feat in enumerate(inst.input_features):
             w_len = len(sent_feat['word_ids'])
             
             # Gán các đặc trưng cơ bản
-            padded_words[i, j, :w_len] = torch.LongTensor(sent_feat['word_ids'])
-            padded_pos[i, j, :w_len] = torch.LongTensor(sent_feat['pos_ids'])
-            padded_ner[i, j, :w_len] = torch.LongTensor(sent_feat['ner_ids'])
-            padded_tfidf[i, j, :w_len] = torch.LongTensor(sent_feat['tfidf_ids'])
+            padded_words[i, j, :w_len] = sent_feat['word_ids']
+            padded_pos[i, j, :w_len] = sent_feat['pos_ids']
+            padded_ner[i, j, :w_len] = sent_feat['ner_ids']
+            padded_tfidf[i, j, :w_len] = sent_feat['tfidf_ids']
             
             # Gán ID mở rộng (để Decoder biết trỏ vào đâu)
-            padded_extended_source[i, j, :w_len] = torch.LongTensor(sent_feat['extended_word_ids'])
+            if 'extended_word_ids' in sent_feat:
+                # Lưu ý: convert sang tensor nếu nó đang là list
+                ext_ids = sent_feat['extended_word_ids']
+                if not isinstance(ext_ids, torch.Tensor):
+                    ext_ids = torch.LongTensor(ext_ids)
+                padded_extended_source[i, j, :w_len] = ext_ids
 
     # 4. Tạo extra_zeros (B, 1, max_oov_len)
-    # Đây là "vùng đệm" để mở rộng vector xác suất từ điển thêm max_oov_len cột
     extra_zeros = None
     if max_oov_len > 0:
         extra_zeros = torch.zeros(bs, 1, max_oov_len)
 
-    # 5. Xử lý Labels (Target để tính loss và Input cho decoder)
-    # labels: Chứa ID mở rộng (để tính loss cho từ OOV)
-    # shifted_right: Thường dùng input_ids chuẩn (OOV=UNK) hoặc dùng chính labels tùy config
+    # 5. Xử lý Labels
+    # shift_right_label dùng input_ids thường (target chưa mở rộng)
+    # labels dùng extended_ids (target mở rộng)
     labels_raw = [torch.LongTensor(inst.label) for inst in batch]
     shifted_labels_raw = [torch.LongTensor(inst.shifted_right_label) for inst in batch]
     
     padded_labels = torch.nn.utils.rnn.pad_sequence(labels_raw, batch_first=True, padding_value=0)
     padded_shifted_labels = torch.nn.utils.rnn.pad_sequence(shifted_labels_raw, batch_first=True, padding_value=0)
 
-    # 6. Đóng gói vào InstanceList của bạn
-    # Lưu ý: Ta set trực tiếp các field để InstanceList xử lý qua __setattr__
+    # 6. Đóng gói vào InstanceList
     res = InstanceList()
     res.input_ids = padded_words
     res.pos_ids = padded_pos
@@ -197,10 +212,11 @@ def hierarchical_collate_fn(batch: List[Instance]) -> InstanceList:
     res.extra_zeros = extra_zeros                   # (B, 1, max_oov)
     res.oov_list = batch_oov_list                   # List[List[str]]
     
-    res.labels = padded_labels                      # Target Loss
-    res.shifted_right_label = padded_shifted_labels # Decoder Input
+    res.labels = padded_labels                      # Target Loss (Extended)
+    res.shifted_right_label = padded_shifted_labels # Decoder Input (Standard)
     
     # Giữ lại sample ID để đánh giá
-    res.id = [inst.id for inst in batch]
+    if hasattr(batch[0], 'id'):
+        res.id = [inst.id for inst in batch]
 
     return res
