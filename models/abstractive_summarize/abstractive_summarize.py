@@ -10,24 +10,33 @@ from vocabs.hierachy_vocab import Hierachy_Vocab
 class WordLevelAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.W1 = nn.Linear(config.hidden_size * 2, config.hidden_size)
-        self.W2 = nn.Linear(config.hidden_size * 2, config.hidden_size)
-        self.V = nn.Linear(config.hidden_size, 1)
+        # SỬA LỖI: Bỏ việc nhân 2. Input từ Encoder đã là 512, khớp với hidden_size config
+        # Dùng 'hidden_size' cho khớp với file config YAML của bạn
+        hidden_dim = config.hidden_size 
+        
+        self.W1 = nn.Linear(hidden_dim, hidden_dim) # Nhận 512 -> Ra 512
+        self.W2 = nn.Linear(hidden_dim, hidden_dim) # Nhận 512 -> Ra 512
+        self.V = nn.Linear(hidden_dim, 1)
 
     def forward(self, word_inputs, decoder_hidden, B, S):
-        # dec_hid: (B, H*2) -> (B, S, H*2) -> (B*S, 1, H*2)
+        # word_inputs: (B*S, W, H) -> (20800, W, 512)
+        # decoder_hidden: (B, H)
+        
+        # Chuẩn bị decoder hidden: (B, H) -> (B, S, H) -> (B*S, 1, H)
         dec_hid = decoder_hidden.unsqueeze(1).expand(-1, S, -1).reshape(B * S, 1, -1)
 
+        # Tính score
+        # W1(word_inputs) + W2(dec_hid)
         scores = self.V(torch.tanh(
             self.W1(word_inputs) + self.W2(dec_hid)
         )) # (B*S, W, 1)
         
         alphas = F.softmax(scores, dim=1) # (B*S, W, 1)
 
-        # Context: (B*S, 1, W) * (B*S, W, H*2) -> (B*S, 1, H*2)
+        # Context: (B*S, 1, W) * (B*S, W, H) -> (B*S, 1, H)
         context_per_sent = torch.bmm(alphas.transpose(1, 2), word_inputs)
         
-        # Mean pooling để lấy context đại diện cho từng câu
+        # Mean pooling về cấp câu: (B, S, H)
         context_word = context_per_sent.view(B, S, -1).mean(dim=1, keepdim=True)
         
         return context_word, alphas.view(B, S, -1) 
@@ -35,22 +44,28 @@ class WordLevelAttention(nn.Module):
 class SentenceLevelAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.W1 = nn.Linear(config.hidden_size * 2, config.hidden_size)
-        self.W2 = nn.Linear(config.hidden_size * 2, config.hidden_size)
-        self.V = nn.Linear(config.hidden_size, 1)
+        # SỬA LỖI TƯƠNG TỰ
+        hidden_dim = config.hidden_size
+        
+        self.W1 = nn.Linear(hidden_dim, hidden_dim)
+        self.W2 = nn.Linear(hidden_dim, hidden_dim)
+        self.V = nn.Linear(hidden_dim, 1)
 
     def forward(self, sent_inputs, decoder_hidden):
-        dec_hid = decoder_hidden.unsqueeze(1) # (B, 1, H*2)
+        # sent_inputs: (B, S, H)
+        # decoder_hidden: (B, H) -> (B, 1, H)
+        dec_hid = decoder_hidden.unsqueeze(1) 
+        
         scores = self.V(torch.tanh(
             self.W1(sent_inputs) + self.W2(dec_hid)
         )) # (B, S, 1)
 
         alphas = F.softmax(scores, dim=1) # (B, S, 1)
         
-        # Context: (B, 1, S) * (B, S, H*2) -> (B, 1, H*2)
+        # Context
         context_sent = torch.bmm(alphas.transpose(1, 2), sent_inputs)
 
-        return context_sent, alphas.squeeze(-1) 
+        return context_sent, alphas.squeeze(-1)
 
 def rescale_attention(p_a_w, p_a_s):
     # p_a_w: (B, S, W), p_a_s: (B, S)
