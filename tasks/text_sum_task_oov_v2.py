@@ -67,7 +67,10 @@ class TextSumTaskOOV_v2(BaseTask):
                 # Labels và dữ liệu PGN
                 labels = items.shifted_right_label.to(self.device)   # (B, T)
                 extended_source_idx = items.extended_source_idx.to(self.device)
-                extra_zeros = items.extra_zeros.to(self.device)
+                if items.extra_zeros is not None:
+                    extra_zeros = items.extra_zeros.to(self.device)
+                else:
+                    extra_zeros = None
                 
                 # Model forward nhận đầy đủ các đặc trưng phân cấp
                 _, loss = self.model(
