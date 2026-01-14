@@ -8,7 +8,7 @@ from typing import List
 from builders.vocab_builder import META_VOCAB
 from .utils import preprocess_sentence
 from .vocab import Vocab
-
+from .utils import preprocess_sentence
 @META_VOCAB.register()
 class Hierachy_Vocab(Vocab):
     def __init__(self, config):
