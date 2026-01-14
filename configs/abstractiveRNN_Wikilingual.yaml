@@ -44,12 +44,12 @@ model:
     ner_dim: 32        # Kích thước NER embedding
     tfidf_dim: 16      # Kích thước TF-IDF embedding
     
-    hidden_size: 256   # Hidden size của Encoder GRU (Bi-dir sẽ thành 512)
+    hidden_dim: 256   # Hidden size của Encoder GRU (Bi-dir sẽ thành 512)
     dropout: 0.3
     num_layers: 1     # Số lớp GRU (trong code bạn dùng config.layer_dim hoặc config.num_layers)
     
   decoder:
-    hidden_size: 512   # Phải khớp với encoder output (256 * 2 = 512)
+    hidden_dim: 512   # Phải khớp với encoder output (256 * 2 = 512)
     layer_dim: 1
     dropout: 0.3
     
