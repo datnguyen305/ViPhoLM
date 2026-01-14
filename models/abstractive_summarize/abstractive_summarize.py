@@ -261,7 +261,7 @@ class AbstractiveTextSummarize(nn.Module):
     def __init__(self, config, vocab: Hierachy_Vocab):
         super().__init__()
         self.vocab = vocab
-        self.MAX_LENGTH = vocab.max_sentence_length + 2
+        self.MAX_LENGTH = vocab.max_sentence_length + 2 
         self.d_model = config.d_model
 
         self.encoder = HierarchicalFeatureRichEncoder(config.encoder, vocab)
@@ -270,30 +270,32 @@ class AbstractiveTextSummarize(nn.Module):
 
     def reshape_word_states_to_decoder(self, word_last_hidden, B, S):
         """
-        Input: (2, B*S, H) -> Output: (1, B, H)
+        Input: (2, B*S, H_enc) -> Output: (1, B, H_dec)
+        H_enc = 256, H_dec = 512
         """
-        # (2, B, S, H)
+        # 1. Tách chiều B*S thành (B, S) -> Shape: (2, B, S, 256)
         hidden = word_last_hidden.view(2, B, S, -1)
-        # Gộp chiều
-        hidden = (hidden[0] + hidden[1]) / 2 
-        # Lấy câu cuối cùng của văn bản (Theo sơ đồ)
-        last_sent_hidden = hidden[:, -1, :] 
-        return last_sent_hidden.unsqueeze(0)
+
+        # 2. Lấy trạng thái câu cuối cùng (index = -1) -> Shape: (2, B, 256)
+        last_sent_hidden = hidden[:, :, -1, :] 
+
+        # 3. SỬA LỖI: Nối 2 hướng (Concat) thay vì cộng trung bình
+        # (2, B, 256) -> Permute thành (B, 2, 256) -> Reshape thành (B, 512)
+        decoder_init_state = last_sent_hidden.permute(1, 0, 2).contiguous().view(B, -1)
+
+        # 4. Thêm chiều num_layers -> (1, B, 512)
+        return decoder_init_state.unsqueeze(0)
 
     def forward(self, x, pos_ids, ner_ids, tfidf_ids, labels, extra_zeros, enc_batch_extend_vocab):
         B, S, W = x.size()
         
-        # 1. Encode
+        # 1. Encoder
         word_hiddens, sent_hiddens, word_last_hidden = self.encoder(x, pos_ids, ner_ids, tfidf_ids)
 
-        # 2. Reshape State: Word Layer -> Decoder
+        # 2. Reshape State (Đã sửa lỗi size)
         decoder_init_states = self.reshape_word_states_to_decoder(word_last_hidden, B, S)
 
-        # 3. Decode
-        # Cần sửa Decoder.forward để trả về danh sách p_gen
-        # Ở đây tôi viết lại logic loop để lấy p_gen ra ngoài
-        
-        # --- Logic loop (thay vì gọi self.decoder(..., target)) ---
+        # 3. Decoder
         decoder_input = torch.full((B, 1), self.vocab.bos_idx, dtype=torch.long, device=x.device)
         decoder_hidden = decoder_init_states
         
@@ -310,9 +312,8 @@ class AbstractiveTextSummarize(nn.Module):
             all_p_gen.append(p_gen)
             decoder_input = labels[:, i].unsqueeze(1) # Teacher Forcing
 
-        all_p_final = torch.cat(all_p_final, dim=1) # (B, T, V_ext)
-        all_p_gen = torch.cat(all_p_gen, dim=1)     # (B, T, 1)
-        # -----------------------------------------------------------
+        all_p_final = torch.cat(all_p_final, dim=1) 
+        all_p_gen = torch.cat(all_p_gen, dim=1)     
 
         # 4. Calc Loss
         total_loss = 0
@@ -334,13 +335,9 @@ class AbstractiveTextSummarize(nn.Module):
         device = x.device
         
         with torch.no_grad():
-            # Encode
             word_hiddens, sent_hiddens, word_last_hidden = self.encoder(x, pos_ids, ner_ids, tfidf_ids)
-            
-            # Init State
             states = self.reshape_word_states_to_decoder(word_last_hidden, B, S)
             
-            # Greedy Loop
             current_input = torch.full((B, 1), self.vocab.bos_idx, dtype=torch.long, device=device)
             decoded_indices = []
             
@@ -349,12 +346,9 @@ class AbstractiveTextSummarize(nn.Module):
                     current_input, states, word_hiddens, sent_hiddens,
                     extra_zeros, enc_batch_extend_vocab
                 )
-                
-                prediction = p_final.argmax(dim=-1) # (B, 1)
+                prediction = p_final.argmax(dim=-1) 
                 decoded_indices.append(prediction)
-                
                 current_input = prediction.clone()
-                # Map OOV -> UNK cho bước tiếp theo
                 current_input[current_input >= self.vocab.vocab_size] = self.vocab.unk_idx
                 
             decoded_indices = torch.cat(decoded_indices, dim=1)
