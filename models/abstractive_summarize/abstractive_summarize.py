@@ -120,9 +120,19 @@ class HierarchicalFeatureRichEncoder(nn.Module):
     def forward(self, input_ids, pos_ids, ner_ids, tfidf_ids):
         B, S, W = input_ids.size()
         
+        # --- SỬA LỖI TẠI ĐÂY ---
+        # input_ids có thể chứa extended_id (cho pointer), nhưng word_emb chỉ nhận id < vocab_size
+        # Tạo bản sao để không ảnh hưởng dữ liệu gốc
+        emb_input_ids = input_ids.clone()
+        
+        # Thay thế tất cả ID >= vocab_size bằng UNK_ID
+        # Giả sử self.word_emb.num_embeddings là vocab_size
+        vocab_size = self.word_emb.num_embeddings
+        emb_input_ids[emb_input_ids >= vocab_size] = 2 # Giả sử UNK_ID = 2 (hoặc lấy từ config)
+        
         # 1. Embedding
         combined_emb = torch.cat([
-            self.word_emb(input_ids),
+            self.word_emb(emb_input_ids), # Dùng emb_input_ids thay vì input_ids
             self.pos_emb(pos_ids),
             self.ner_emb(ner_ids),
             self.tfidf_emb(tfidf_ids)
@@ -199,7 +209,11 @@ class Decoder(nn.Module):
         return all_p_final, decoder_hidden, all_p_gen
 
     def forward_step(self, input, states, word_hiddens, sent_hiddens, extra_zeros=None, enc_batch_extend_vocab=None):
-        output_prev = self.embedding(input)
+        emb_input = input.clone()
+        vocab_size = self.embedding.num_embeddings
+        emb_input[emb_input >= vocab_size] = 2 # Map về UNK
+        
+        output_prev = self.embedding(emb_input) # Dùng emb_input
         output_prev = F.relu(output_prev) 
         
         B, S, _ = sent_hiddens.size()
