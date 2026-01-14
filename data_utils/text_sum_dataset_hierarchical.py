@@ -7,7 +7,7 @@ from underthesea import pos_tag, ner
 from builders.dataset_builder import META_DATASET
 from utils.instance import Instance
 from vocabs.hierachy_vocab import Hierachy_Vocab
-
+from vocabs.utils import preprocess_sentence
 @META_DATASET.register()
 class TextSumDataset_Hierarchical(Dataset):
     def __init__(self, config, vocab: Hierachy_Vocab) -> None:
@@ -40,12 +40,12 @@ class TextSumDataset_Hierarchical(Dataset):
             all_sentences.extend(sents)
 
         # Lấy toàn bộ token để tính TF-IDF
-        full_text_tokens = [t.lower() for s in all_sentences for t in self._vocab.preprocess_sentence(s)]
+        full_text_tokens = [t.lower() for s in all_sentences for t in preprocess_sentence(s)]
 
         encoded_source_list = []
         for sent in all_sentences:
             # 1. Tiền xử lý lấy tokens chuẩn của bạn
-            tokens = self._vocab.preprocess_sentence(sent) 
+            tokens = preprocess_sentence(sent) 
             
             # 2. Trích xuất POS và NER bằng underthesea
             # pos_tag trả về list of tuples: [('Từ', 'Loại'), ...]
