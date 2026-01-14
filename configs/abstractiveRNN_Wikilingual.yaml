@@ -28,7 +28,7 @@ dataset:
     path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
   
   # Batch size nên nhỏ một chút vì mô hình Phân cấp (3D Tensor) tốn VRAM
-  batch_size: 8
+  batch_size: 2
   num_workers: 4
 
 model:
