@@ -134,7 +134,7 @@ def hierarchical_collate_fn(batch):
     """
     Hàm Collate xử lý dữ liệu phân cấp (Hierarchical) và Pointer-Generator.
     """
-    # 1. Tìm kích thước lớn nhất trong batch (Max sentences, Max words)
+    # 1. Tìm kích thước lớn nhất trong batch
     # batch là list các Instance trả về từ Dataset
     max_s = max(len(inst.input_features) for inst in batch)
     
@@ -146,9 +146,6 @@ def hierarchical_collate_fn(batch):
             
     bs = len(batch)
     
-    # Lấy vocab_size từ instance đầu tiên (được truyền từ Dataset)
-    vocab_size = batch[0].vocab_size 
-
     # 2. Khởi tạo các Tensor 3D (B, S, W)
     padded_words = torch.zeros(bs, max_s, max_w).long()
     padded_pos = torch.zeros(bs, max_s, max_w).long()
