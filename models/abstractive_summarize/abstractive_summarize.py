@@ -10,9 +10,9 @@ from vocabs.hierachy_vocab import Hierachy_Vocab
 class WordLevelAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.W1 = nn.Linear(config.hidden_dim * 2, config.hidden_dim)
-        self.W2 = nn.Linear(config.hidden_dim * 2, config.hidden_dim)
-        self.V = nn.Linear(config.hidden_dim, 1)
+        self.W1 = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.W2 = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.V = nn.Linear(config.hidden_size, 1)
 
     def forward(self, word_inputs, decoder_hidden, B, S):
         # dec_hid: (B, H*2) -> (B, S, H*2) -> (B*S, 1, H*2)
@@ -35,9 +35,9 @@ class WordLevelAttention(nn.Module):
 class SentenceLevelAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.W1 = nn.Linear(config.hidden_dim * 2, config.hidden_dim)
-        self.W2 = nn.Linear(config.hidden_dim * 2, config.hidden_dim)
-        self.V = nn.Linear(config.hidden_dim, 1)
+        self.W1 = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.W2 = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.V = nn.Linear(config.hidden_size, 1)
 
     def forward(self, sent_inputs, decoder_hidden):
         dec_hid = decoder_hidden.unsqueeze(1) # (B, 1, H*2)
