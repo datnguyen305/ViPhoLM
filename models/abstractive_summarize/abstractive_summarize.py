@@ -159,8 +159,11 @@ class Decoder(nn.Module):
         self.vocab = vocab
         self.embedding = nn.Embedding(vocab.vocab_size, config.hidden_size)
         
+        # --- SỬA LỖI KÍCH THƯỚC Ở ĐÂY ---
+        # Input thực tế = Embedding (H) + Context (H) = 2H
+        # 512 + 512 = 1024
         self.GRU = nn.GRU(
-            config.hidden_size * 3, # Input: Emb(H) + Context(H*2)
+            config.hidden_size * 2,  # Đã sửa từ *3 thành *2
             config.hidden_size,
             bidirectional=False,
             num_layers=config.layer_dim, 
@@ -172,76 +175,62 @@ class Decoder(nn.Module):
         self.attention_word = WordLevelAttention(config)
         self.attention_sent = SentenceLevelAttention(config)
         
-        # Selector Gate
-        self.selector = nn.Linear(config.hidden_size * 4, config.hidden_size)
+        # --- SỬA LỖI KÍCH THƯỚC SELECTOR ---
+        # Input thực tế = Hidden (H) + Embedding (H) + Context (H) = 3H
+        # 512 + 512 + 512 = 1536
+        self.selector = nn.Linear(config.hidden_size * 3, config.hidden_size) # Đã sửa từ *4 thành *3
         self.v_s = nn.Linear(config.hidden_size, 1)
         
     def forward(self, word_hiddens, sent_hiddens, decoder_initial_states, target, extra_zeros=None, enc_batch_extend_vocab=None):
         B, S_target = target.size()
         
-        # Token bắt đầu
         decoder_input = torch.full((B, 1), self.vocab.bos_idx, dtype=torch.long, device=self.config.device)
-        
-        # Khởi tạo hidden state (Đã được reshape chuẩn từ bên ngoài)
         decoder_hidden = decoder_initial_states
         
         all_p_final = []
         all_p_gen = []
         
         for i in range(S_target):
-            p_final, decoder_hidden, _ = self.forward_step(
+            p_final, decoder_hidden, p_gen = self.forward_step(
                 decoder_input, decoder_hidden, word_hiddens, sent_hiddens, 
                 extra_zeros, enc_batch_extend_vocab
             )
-            
-            # Thu thập xác suất để tính loss và p_gen để regularization
             all_p_final.append(p_final)
-            # p_gen được tính ngầm trong forward_step, cần trả về nếu muốn dùng
-            # Ở bản sửa lỗi này, tôi sẽ chỉnh forward_step để trả về p_gen
-            
-            # Teacher forcing
+            all_p_gen.append(p_gen)
             decoder_input = target[:, i].unsqueeze(1) 
 
-        all_p_final = torch.cat(all_p_final, dim=1) # (B, S_target, V_ext)
-        # Lưu ý: Cần chỉnh forward_step để trả về p_gen nếu muốn dùng ở calculate_loss
-        return all_p_final, decoder_hidden
+        all_p_final = torch.cat(all_p_final, dim=1)
+        all_p_gen = torch.cat(all_p_gen, dim=1) 
+        
+        return all_p_final, decoder_hidden, all_p_gen
 
     def forward_step(self, input, states, word_hiddens, sent_hiddens, extra_zeros=None, enc_batch_extend_vocab=None):
         output_prev = self.embedding(input)
         output_prev = F.relu(output_prev) 
         
         B, S, _ = sent_hiddens.size()
-        
-        # Attention
-        # states[0] hoặc states[-1] tùy thuộc vào GRU layer output format
-        # Với GRU (num_layers, B, H), ta lấy layer cuối cùng
         curr_state = states[-1]
 
         _, p_a_w = self.attention_word(word_hiddens, curr_state, B, S)
         _, p_a_s = self.attention_sent(sent_hiddens, curr_state)
         rescaled_attention = rescale_attention(p_a_w, p_a_s)
 
-        # Context Vector
-        # word_hiddens: (B*S, W, H*2) -> Reshape (B, S*W, H*2)
         word_hiddens_flat = word_hiddens.reshape(B, S * word_hiddens.size(1), -1)
-        context_vector = torch.bmm(rescaled_attention.unsqueeze(1), word_hiddens_flat) # (B, 1, H*2)
+        context_vector = torch.bmm(rescaled_attention.unsqueeze(1), word_hiddens_flat) 
         
-        # GRU Step
-        rnn_input = torch.cat((output_prev, context_vector), dim=-1)
+        rnn_input = torch.cat((output_prev, context_vector), dim=-1) # Kích thước bây giờ là 1024
         output, hidden = self.GRU(rnn_input, states)
 
-        # Selector / Generator Gate
+        # Selector Input: (B, H*3)
         selector_input = torch.cat((hidden[-1], 
             output_prev.squeeze(1), 
             context_vector.squeeze(1)), dim=-1
         ) 
-        p_gen = torch.sigmoid(self.v_s(torch.tanh(self.selector(selector_input)))) # (B, 1)
+        p_gen = torch.sigmoid(self.v_s(torch.tanh(self.selector(selector_input))))
 
-        # Vocab Distribution
         p_vocab = F.softmax(self.out(output), dim=-1) 
         p_vocab_weighted = p_gen.unsqueeze(1) * p_vocab 
 
-        # Pointer Mechanism
         if extra_zeros is not None:
             p_vocab_weighted = torch.cat([p_vocab_weighted, extra_zeros], dim=-1)
 
@@ -251,7 +240,6 @@ class Decoder(nn.Module):
             (1 - p_gen).unsqueeze(1) * rescaled_attention.unsqueeze(1)
         )
 
-        # Trả về thêm p_gen để tính loss
         return p_final, hidden, p_gen
 
 # --- MAIN MODEL WRAPPER ---
