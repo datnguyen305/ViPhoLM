@@ -1,18 +1,17 @@
 from torch.utils.data import Dataset
 import json
 import torch
-# Thay spacy bằng underthesea
 from underthesea import pos_tag, ner
-
 from builders.dataset_builder import META_DATASET
 from utils.instance import Instance
-from vocabs.hierachy_vocab import Hierachy_Vocab
 from vocabs.utils import preprocess_sentence
+# Đảm bảo import đúng vocab
+# from vocabs.hierachy_vocab import Hierachy_Vocab 
+
 @META_DATASET.register()
 class TextSumDataset_Hierarchical(Dataset):
-    def __init__(self, config, vocab: Hierachy_Vocab) -> None:
+    def __init__(self, config, vocab) -> None:
         super().__init__()
-
         path: str = config.path
         self._data = json.load(open(path, encoding='utf-8'))
         self._keys = list(self._data.keys())
@@ -22,12 +21,9 @@ class TextSumDataset_Hierarchical(Dataset):
         return len(self._data)
     
     def _get_tfidf_bin(self, word, all_tokens):
-        # Tính TF đơn giản
         tf = all_tokens.count(word) / max(len(all_tokens), 1)
-        # IDF lấy từ từ điển đã tính sẵn trong vocab
         idf = self._vocab.idf_dict.get(word, 1.0)
         tfidf = tf * idf
-        # Chia thành 10 bins (0-9)
         return int(min(tfidf * 100, 9))
 
     def __getitem__(self, index: int) -> Instance:
@@ -36,58 +32,97 @@ class TextSumDataset_Hierarchical(Dataset):
         
         raw_source = item["source"]
         all_sentences = []
-        for _, sents in raw_source.items():
-            all_sentences.extend(sents)
+        # Xử lý input dạng dict hoặc list
+        if isinstance(raw_source, dict):
+            for _, sents in raw_source.items():
+                all_sentences.extend(sents)
+        elif isinstance(raw_source, list):
+            all_sentences = raw_source
+        else:
+            all_sentences = [str(raw_source)]
 
-        # Lấy toàn bộ token để tính TF-IDF
-        full_text_tokens = [t.lower() for s in all_sentences for t in preprocess_sentence(s)]
-
-        encoded_source_list = []
-        for sent in all_sentences:
-            # 1. Tiền xử lý lấy tokens chuẩn của bạn
-            tokens = preprocess_sentence(sent) 
+        # 1. Thu thập OOV list
+        oov_list = []
+        full_text_tokens = []
+        processed_sentences_tokens = []
+        
+        for s in all_sentences:
+            tokens = preprocess_sentence(s)
+            processed_sentences_tokens.append(tokens)
+            full_text_tokens.extend([t.lower() for t in tokens])
             
-            # 2. Trích xuất POS và NER bằng underthesea
-            # pos_tag trả về list of tuples: [('Từ', 'Loại'), ...]
-            # ner trả về list of tuples: [('Từ', 'Loại', 'Thực thể'), ...]
+            for t in tokens:
+                if t not in self._vocab.stoi and t not in oov_list:
+                    oov_list.append(t)
+
+        # 2. Xử lý Source Features
+        encoded_source_list = []
+        vocab_size = self._vocab.vocab_size
+
+        for i, sent in enumerate(all_sentences):
+            tokens = processed_sentences_tokens[i]
+            
+            # POS & NER
             try:
                 ut_pos = pos_tag(sent)
                 ut_ner = ner(sent)
-                
-                # Ánh xạ nhãn sang ID (lấy index 1 cho POS và index 2 cho NER)
-                # Dùng [:len(tokens)] để đảm bảo độ dài khớp với tokens đã preprocess
+                # Map tags (giả sử vocab đã có pos_stoi/ner_stoi)
                 pos_tags = [self._vocab.pos_stoi.get(t[1], 0) for t in ut_pos][:len(tokens)]
                 ner_tags = [self._vocab.ner_stoi.get(t[2], 0) for t in ut_ner][:len(tokens)]
             except:
-                # Trường hợp lỗi thư viện hoặc câu rỗng
-                pos_tags = [0] * len(tokens)
-                ner_tags = [0] * len(tokens)
+                pos_tags, ner_tags = [0] * len(tokens), [0] * len(tokens)
 
-            # Padding nếu tags bị ngắn hơn tokens do khác biệt bộ tách từ
-            if len(pos_tags) < len(tokens):
-                pos_tags += [0] * (len(tokens) - len(pos_tags))
-            if len(ner_tags) < len(tokens):
-                ner_tags += [0] * (len(tokens) - len(ner_tags))
+            # Padding tags nếu thiếu
+            if len(pos_tags) < len(tokens): pos_tags += [0] * (len(tokens) - len(pos_tags))
+            if len(ner_tags) < len(tokens): ner_tags += [0] * (len(tokens) - len(ner_tags))
 
-            # 3. Tính TF-IDF bins
             tfidf_bins = [self._get_tfidf_bin(t, full_text_tokens) for t in tokens]
 
-            # 4. Mã hóa ID từ vựng
             word_ids = [self._vocab.stoi.get(t, self._vocab.unk_idx) for t in tokens]
+            
+            # Extended IDs cho Pointer
+            extended_word_ids = []
+            for t in tokens:
+                if t in self._vocab.stoi:
+                    extended_word_ids.append(self._vocab.stoi[t])
+                else:
+                    extended_word_ids.append(vocab_size + oov_list.index(t))
 
-            # Lưu vào cấu trúc phân cấp
             encoded_source_list.append({
-                'word_ids': torch.LongTensor(word_ids),
-                'pos_ids': torch.LongTensor(pos_tags),
-                'ner_ids': torch.LongTensor(ner_tags),
-                'tfidf_ids': torch.LongTensor(tfidf_bins)
+                'word_ids': word_ids,
+                'extended_word_ids': extended_word_ids, 
+                'pos_ids': pos_tags,
+                'ner_ids': ner_tags,
+                'tfidf_ids': tfidf_bins,
+                'tokens': tokens # Lưu tokens gốc để debug nếu cần
             })
         
-        # Mã hóa Target
-        encoded_target = self._vocab.encode_sentence(item["target"])
+        # 3. Xử lý Target & Shifted Label (QUAN TRỌNG)
+        target_tokens = preprocess_sentence(item["target"])
+        
+        # 3a. Target Input (Shifted Right) cho Decoder: <BOS> ... <EOS> (dùng ID thường)
+        # Lưu ý: Input decoder thường bắt đầu bằng BOS và không cần EOS
+        dec_input_tokens = [self._vocab.bos_token] + target_tokens
+        word_ids_input = [self._vocab.stoi.get(t, self._vocab.unk_idx) for t in dec_input_tokens]
 
+        # 3b. Target Label cho Loss: ... <EOS> (dùng ID mở rộng)
+        # Label là từ tiếp theo cần dự đoán, kết thúc bằng EOS
+        label_tokens = target_tokens + [self._vocab.eos_token]
+        extended_label_ids = []
+        for t in label_tokens:
+            if t in self._vocab.stoi:
+                extended_label_ids.append(self._vocab.stoi[t])
+            elif t in oov_list:
+                extended_label_ids.append(vocab_size + oov_list.index(t))
+            else:
+                extended_label_ids.append(self._vocab.unk_idx)
+
+        # TRẢ VỀ INSTANCE VỚI ĐẦY ĐỦ TRƯỜNG
         return Instance(
             id = key,
             input_features = encoded_source_list, 
-            label = encoded_target
+            shifted_right_label = word_ids_input,  # <--- Trường này đang thiếu ở code cũ
+            label = extended_label_ids,            # Target cho Loss
+            oov_list = oov_list,
+            vocab_size = vocab_size
         )
