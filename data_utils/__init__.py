@@ -133,10 +133,9 @@ def collate_fn_seneca(batch):
 def hierarchical_collate_fn(batch):
     """
     Hàm Collate xử lý dữ liệu phân cấp (Hierarchical) và Pointer-Generator.
-    Thay thế hàm cũ đang gây lỗi AttributeError.
     """
     # 1. Tìm kích thước lớn nhất trong batch (Max sentences, Max words)
-    # Lưu ý: batch là list các Instance trả về từ Dataset
+    # batch là list các Instance trả về từ Dataset
     max_s = max(len(inst.input_features) for inst in batch)
     
     # Tìm max_w (số từ nhiều nhất trong bất kỳ câu nào của batch)
@@ -147,7 +146,7 @@ def hierarchical_collate_fn(batch):
             
     bs = len(batch)
     
-    # Lấy vocab_size từ instance đầu tiên
+    # Lấy vocab_size từ instance đầu tiên (được truyền từ Dataset)
     vocab_size = batch[0].vocab_size 
 
     # 2. Khởi tạo các Tensor 3D (B, S, W)
@@ -156,7 +155,7 @@ def hierarchical_collate_fn(batch):
     padded_ner = torch.zeros(bs, max_s, max_w).long()
     padded_tfidf = torch.zeros(bs, max_s, max_w).long()
     
-    # Tensor quan trọng cho Pointer-Generator
+    # Tensor quan trọng cho Pointer-Generator (Extended ID)
     padded_extended_source = torch.zeros(bs, max_s, max_w).long()
 
     batch_oov_list = []
@@ -164,12 +163,12 @@ def hierarchical_collate_fn(batch):
 
     # 3. Duyệt qua từng mẫu trong batch để fill dữ liệu
     for i, inst in enumerate(batch):
-        # Lấy thông tin OOV
+        # Lấy thông tin OOV list
         oovs = inst.get('oov_list', [])
         batch_oov_list.append(oovs)
         max_oov_len = max(max_oov_len, len(oovs))
 
-        # FILL DỮ LIỆU TỪ INPUT_FEATURES (Đây là chỗ bạn bị lỗi trước đó)
+        # --- KHẮC PHỤC LỖI Ở ĐÂY: Duyệt input_features thay vì gọi input_ids ---
         for j, sent_feat in enumerate(inst.input_features):
             w_len = len(sent_feat['word_ids'])
             
@@ -179,9 +178,8 @@ def hierarchical_collate_fn(batch):
             padded_ner[i, j, :w_len] = sent_feat['ner_ids']
             padded_tfidf[i, j, :w_len] = sent_feat['tfidf_ids']
             
-            # Gán ID mở rộng (để Decoder biết trỏ vào đâu)
+            # Gán ID mở rộng (nếu có)
             if 'extended_word_ids' in sent_feat:
-                # Lưu ý: convert sang tensor nếu nó đang là list
                 ext_ids = sent_feat['extended_word_ids']
                 if not isinstance(ext_ids, torch.Tensor):
                     ext_ids = torch.LongTensor(ext_ids)
@@ -193,29 +191,27 @@ def hierarchical_collate_fn(batch):
         extra_zeros = torch.zeros(bs, 1, max_oov_len)
 
     # 5. Xử lý Labels
-    # shift_right_label dùng input_ids thường (target chưa mở rộng)
-    # labels dùng extended_ids (target mở rộng)
     labels_raw = [torch.LongTensor(inst.label) for inst in batch]
     shifted_labels_raw = [torch.LongTensor(inst.shifted_right_label) for inst in batch]
     
     padded_labels = torch.nn.utils.rnn.pad_sequence(labels_raw, batch_first=True, padding_value=0)
     padded_shifted_labels = torch.nn.utils.rnn.pad_sequence(shifted_labels_raw, batch_first=True, padding_value=0)
 
-    # 6. Đóng gói vào InstanceList
+    # 6. Đóng gói vào InstanceList để Model nhận diện
     res = InstanceList()
-    res.input_ids = padded_words
+    res.input_ids = padded_words          # (B, S, W)
     res.pos_ids = padded_pos
     res.ner_ids = padded_ner
     res.tfidf_ids = padded_tfidf
     
-    res.extended_source_idx = padded_extended_source # (B, S, W)
-    res.extra_zeros = extra_zeros                   # (B, 1, max_oov)
-    res.oov_list = batch_oov_list                   # List[List[str]]
+    res.extended_source_idx = padded_extended_source
+    res.extra_zeros = extra_zeros
+    res.oov_list = batch_oov_list
     
-    res.labels = padded_labels                      # Target Loss (Extended)
-    res.shifted_right_label = padded_shifted_labels # Decoder Input (Standard)
+    res.labels = padded_labels                      # Target Loss
+    res.shifted_right_label = padded_shifted_labels # Decoder Input
     
-    # Giữ lại sample ID để đánh giá
+    # Giữ lại ID để đánh giá
     if hasattr(batch[0], 'id'):
         res.id = [inst.id for inst in batch]
 
