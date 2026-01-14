@@ -269,17 +269,9 @@ class AbstractiveTextSummarize(nn.Module):
         Input: (2, B*S, H_enc) -> Output: (1, B, H_dec)
         H_enc = 256, H_dec = 512
         """
-        # 1. Tách chiều B*S thành (B, S) -> Shape: (2, B, S, 256)
         hidden = word_last_hidden.view(2, B, S, -1)
-
-        # 2. Lấy trạng thái câu cuối cùng (index = -1) -> Shape: (2, B, 256)
         last_sent_hidden = hidden[:, :, -1, :] 
-
-        # 3. SỬA LỖI: Nối 2 hướng (Concat) thay vì cộng trung bình
-        # (2, B, 256) -> Permute thành (B, 2, 256) -> Reshape thành (B, 512)
         decoder_init_state = last_sent_hidden.permute(1, 0, 2).contiguous().view(B, -1)
-
-        # 4. Thêm chiều num_layers -> (1, B, 512)
         return decoder_init_state.unsqueeze(0)
 
     def forward(self, x, pos_ids, ner_ids, tfidf_ids, labels, extra_zeros, enc_batch_extend_vocab):
@@ -288,7 +280,7 @@ class AbstractiveTextSummarize(nn.Module):
         # 1. Encoder
         word_hiddens, sent_hiddens, word_last_hidden = self.encoder(x, pos_ids, ner_ids, tfidf_ids)
 
-        # 2. Reshape State (Đã sửa lỗi size)
+        # 2. Reshape State
         decoder_init_states = self.reshape_word_states_to_decoder(word_last_hidden, B, S)
 
         # 3. Decoder
@@ -308,16 +300,23 @@ class AbstractiveTextSummarize(nn.Module):
             all_p_gen.append(p_gen)
             decoder_input = labels[:, i].unsqueeze(1) # Teacher Forcing
 
-        all_p_final = torch.cat(all_p_final, dim=1) 
-        all_p_gen = torch.cat(all_p_gen, dim=1)     
+        all_p_final = torch.cat(all_p_final, dim=1) # (B, S, V_ext)
+        all_p_gen = torch.cat(all_p_gen, dim=1)     # (B, S) -> Tensor 2D
 
         # 4. Calc Loss
         total_loss = 0
         for i in range(S_target):
+            # SỬA LỖI TẠI ĐÂY: Truy cập all_p_gen[:, i] thay vì all_p_gen[:, i, :]
+            # Ta cần unsqueeze(1) để biến (B) thành (B, 1) cho khớp với hàm loss (nếu cần)
+            # Nhưng hàm calculate_loss của bạn dùng .squeeze() bên trong nên truyền (B) hay (B,1) đều được.
+            # An toàn nhất là truyền (B, 1).
+            
+            p_gen_step = all_p_gen[:, i].unsqueeze(1) 
+            
             step_loss = self.loss_fn(
                 p_final=all_p_final[:, i, :], 
-                p_selection=all_p_gen[:, i, :], 
-                target_idx=labels[:, i], 
+                p_selection=p_gen_step,            # (B, 1)
+                target_idx=labels[:, i],           # (B)
                 vocab_size=self.vocab.vocab_size
             )
             total_loss += step_loss
