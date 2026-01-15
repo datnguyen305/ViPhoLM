@@ -102,7 +102,11 @@ class TextSumTaskOOV_v2(BaseTask):
                 
                 label = items.labels.to(self.device) # Lưu ý tên field là labels hay label tùy dataset
                 extended_source_idx = items.extended_source_idx.to(self.device)
-                extra_zeros = items.extra_zeros.to(self.device)
+                # --- SỬA LỖI TẠI ĐÂY: Kiểm tra None cho extra_zeros ---
+                if items.extra_zeros is not None:
+                    extra_zeros = items.extra_zeros.to(self.device)
+                else:
+                    extra_zeros = None
                 oov_list_batch = items.oov_list # List[List[str]]
                 
                 with torch.no_grad():
