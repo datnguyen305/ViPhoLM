@@ -55,7 +55,7 @@ model:
     
 training:
   checkpoint_path: checkpoints/hierarchical_pgn
-  learning_rate: 0.001
+  learning_rate: 0.15
   warmup: 2000
   patience: 5
   score: rouge-L
