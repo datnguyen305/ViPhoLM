@@ -120,31 +120,9 @@ class HierarchicalFeatureRichEncoder(nn.Module):
     def forward(self, input_ids, pos_ids, ner_ids, tfidf_ids):
         B, S, W = input_ids.size()
         
-        # --- BẢO VỆ TUYỆT ĐỐI INPUT IDS ---
-        # Đảm bảo mọi ID đều nằm trong khoảng [0, vocab_size - 1]
-        # self.word_emb.num_embeddings chính là vocab_size
-        vocab_limit = self.word_emb.num_embeddings
-        
-        # Tạo bản sao để không ảnh hưởng luồng Pointer
-        safe_input_ids = input_ids.clone()
-        
-        # Thay thế các giá trị không hợp lệ bằng UNK (thường là index 2 hoặc 3)
-        # unk_idx = 2 (Giả sử, bạn có thể lấy từ config nếu có)
-        unk_idx = 2 
-        
-        # Mask lỗi quá lớn
-        mask_overflow = safe_input_ids >= vocab_limit
-        if mask_overflow.any():
-            safe_input_ids[mask_overflow] = unk_idx
-            
-        # Mask lỗi số âm (nếu có lỗi lạ từ dataset)
-        mask_underflow = safe_input_ids < 0
-        if mask_underflow.any():
-            safe_input_ids[mask_underflow] = unk_idx
-
-        # 1. Embedding với input đã an toàn
+        # 1. Embedding
         combined_emb = torch.cat([
-            self.word_emb(safe_input_ids), # Dùng safe_input_ids
+            self.word_emb(input_ids),
             self.pos_emb(pos_ids),
             self.ner_emb(ner_ids),
             self.tfidf_emb(tfidf_ids)
@@ -221,23 +199,8 @@ class Decoder(nn.Module):
         return all_p_final, decoder_hidden, all_p_gen
 
     def forward_step(self, input, states, word_hiddens, sent_hiddens, extra_zeros=None, enc_batch_extend_vocab=None):
-        vocab_limit = self.embedding.num_embeddings
-        unk_idx = 2
-        
-        safe_input = input.clone()
-        
-        # Xử lý OOV
-        mask_oov = safe_input >= vocab_limit
-        if mask_oov.any():
-            safe_input[mask_oov] = unk_idx
-            
-        # Xử lý âm (đề phòng)
-        mask_neg = safe_input < 0
-        if mask_neg.any():
-            safe_input[mask_neg] = unk_idx
-
-        output_prev = self.embedding(safe_input) # Dùng safe_input
-        output_prev = F.relu(output_prev)
+        output_prev = self.embedding(input)
+        output_prev = F.relu(output_prev) 
         
         B, S, _ = sent_hiddens.size()
         curr_state = states[-1]

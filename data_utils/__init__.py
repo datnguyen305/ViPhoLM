@@ -130,40 +130,57 @@ def collate_fn_seneca(batch):
         "label": labels,
         "id": [x.id for x in batch]
     }
-def hierarchical_collate_fn(batch):
-    # 1. Tìm kích thước lớn nhất
-    max_s = max(len(inst.input_features) for inst in batch)
-    
-    # Tìm max_w
+def hierarchical_collate_fn(items: List[Instance]):
+    """
+    Collate function cho mô hình Hierarchical + Pointer-Generator.
+    Gộp list các Instance thành một InstanceList chứa các Tensor đã padding.
+    """
+    # 1. Thu thập thông tin kích thước Batch
+    bs = len(items)
+    # Tìm số câu tối đa (Max Sentences - S)
+    max_s = max(len(inst.input_features) for inst in items)
+    # Tìm số từ tối đa trong một câu (Max Words - W)
     max_w = 0
-    for inst in batch:
+    for inst in items:
         for feat in inst.input_features:
             max_w = max(max_w, len(feat['word_ids']))
-            
-    bs = len(batch)
-    
-    # 2. Khởi tạo Tensors 3D
+
+    # 2. Khởi tạo các Tensor chứa dữ liệu (B, S, W)
+    # Mặc định điền 0 (Padding Index)
     padded_words = torch.zeros(bs, max_s, max_w).long()
     padded_pos = torch.zeros(bs, max_s, max_w).long()
     padded_ner = torch.zeros(bs, max_s, max_w).long()
     padded_tfidf = torch.zeros(bs, max_s, max_w).long()
     padded_extended_source = torch.zeros(bs, max_s, max_w).long()
 
+    # Các list để chứa thông tin khác
+    ids_list = []
     batch_oov_list = []
-    max_oov_len = 0
+    labels_list = []
+    shifted_labels_list = []
+    max_oov_count = 0
 
-    # 3. Fill dữ liệu
-    for i, inst in enumerate(batch):
-        oovs = inst.get('oov_list', [])
+    # 3. Duyệt qua từng Instance để điền dữ liệu
+    for i, instance in enumerate(items):
+        # Thu thập ID và OOV
+        if hasattr(instance, 'id'):
+            ids_list.append(instance.id)
+            
+        oovs = instance.get('oov_list', [])
         batch_oov_list.append(oovs)
-        max_oov_len = max(max_oov_len, len(oovs))
+        if len(oovs) > max_oov_count:
+            max_oov_count = len(oovs)
 
-        # --- PHẦN SỬA LỖI TYPE ERROR ---
-        # Ép kiểu list -> torch.LongTensor() trước khi gán
-        for j, sent_feat in enumerate(inst.input_features):
+        # Thu thập Labels (Target)
+        # Chuyển List -> Tensor ngay tại đây
+        labels_list.append(torch.LongTensor(instance.label))
+        shifted_labels_list.append(torch.LongTensor(instance.shifted_right_label))
+
+        # --- ĐIỀN DỮ LIỆU PHÂN CẤP (HIERARCHICAL FILLING) ---
+        for j, sent_feat in enumerate(instance.input_features):
             w_len = len(sent_feat['word_ids'])
             
-            # Sửa: Bọc sent_feat['...'] trong torch.LongTensor(...)
+            # Ép kiểu và gán vào Tensor tổng (Khắc phục TypeError)
             padded_words[i, j, :w_len] = torch.LongTensor(sent_feat['word_ids'])
             padded_pos[i, j, :w_len] = torch.LongTensor(sent_feat['pos_ids'])
             padded_ner[i, j, :w_len] = torch.LongTensor(sent_feat['ner_ids'])
@@ -172,33 +189,32 @@ def hierarchical_collate_fn(batch):
             if 'extended_word_ids' in sent_feat:
                 padded_extended_source[i, j, :w_len] = torch.LongTensor(sent_feat['extended_word_ids'])
 
-    # 4. Extra zeros
+    # 4. Xử lý Labels (Padding chuỗi 1D)
+    padded_labels = pad_sequence(labels_list, batch_first=True, padding_value=0)
+    padded_shifted_labels = pad_sequence(shifted_labels_list, batch_first=True, padding_value=0)
+
+    # 5. Tạo extra_zeros cho Pointer-Generator
     extra_zeros = None
-    if max_oov_len > 0:
-        extra_zeros = torch.zeros(bs, 1, max_oov_len)
+    if max_oov_count > 0:
+        extra_zeros = torch.zeros(bs, 1, max_oov_count)
 
-    # 5. Labels
-    labels_raw = [torch.LongTensor(inst.label) for inst in batch]
-    shifted_labels_raw = [torch.LongTensor(inst.shifted_right_label) for inst in batch]
-    
-    padded_labels = torch.nn.utils.rnn.pad_sequence(labels_raw, batch_first=True, padding_value=0)
-    padded_shifted_labels = torch.nn.utils.rnn.pad_sequence(shifted_labels_raw, batch_first=True, padding_value=0)
-
-    # 6. Đóng gói
+    # 6. Đóng gói vào InstanceList
     res = InstanceList()
+    
+    # Input Features (3D Tensors)
     res.input_ids = padded_words
     res.pos_ids = padded_pos
     res.ner_ids = padded_ner
     res.tfidf_ids = padded_tfidf
-    
     res.extended_source_idx = padded_extended_source
+    
+    # Target & Meta info
+    res.labels = padded_labels
+    res.shifted_right_label = padded_shifted_labels
     res.extra_zeros = extra_zeros
     res.oov_list = batch_oov_list
     
-    res.labels = padded_labels 
-    res.shifted_right_label = padded_shifted_labels 
-    
-    if hasattr(batch[0], 'id'):
-        res.id = [inst.id for inst in batch]
+    if ids_list:
+        res.id = ids_list
 
     return res
