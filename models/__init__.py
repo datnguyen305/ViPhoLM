@@ -16,3 +16,4 @@ from .seneca.seneca import SENECA_Baseline
 from .longformer.longformer_encoder_decoder import LongformerEncoderDecoderModel
 # from .bottom_up.model import BottomUpSummarizer
 from .transformer_phoneme.transfomer_phoneme import Transformer_Phoneme_Model
+from .bottom_up.content_selector import ContentSelector

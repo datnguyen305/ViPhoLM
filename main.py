@@ -14,3 +14,4 @@ if __name__ == "__main__":
     task.start()
     task.get_predictions()
     task.logger.info("Task done!")
+
