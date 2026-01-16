@@ -25,38 +25,23 @@ dataset:
   num_workers: 8
 
 model:
-  name: HEPOS_Wikilingual
-  architecture: HEPOSBaselineSummarizer
-  
-  encoder:
-    d_model: 512
-    n_layers: 6
-    n_head: 8
-    ffn_hidden: 2048
-    drop_prob: 0.1
-    max_len: 128
-
-  decoder:
-    d_model: 512
-    n_layers: 6
-    n_head: 8
-    ffn_hidden: 2048
-    drop_prob: 0.1
-    max_len: 128
-    stride: 8   # = n_head (khuyến nghị paper)
-
+  name: HEPOS_BART_Wiki
+  architecture: HEPOSBartSummarizer
+  pretrained_name: facebook/bart-large-cnn
+  stride: 8
   device: cuda
+
+
 
 training:
   checkpoint_path: "checkpoints"
   warmup: 8000
   patience: 5
   score: rouge-L
+  scheduler: none
   batch_size: 4
-  gradient_accumulation_steps: 8   # batch effective = 32
   learning_rate: 0.0001
   epochs: 20
   beam_size: 4
-  length_penalty: 2.0
 
 task: TextSumTask
