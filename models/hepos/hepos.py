@@ -22,10 +22,13 @@ class HEPOSBartSummarizer(nn.Module):
             self.model,
             stride=config.stride
         )
+        self.d_model = self.model.config.d_model
 
         self.model.to(config.device)
 
     def forward(self, input_ids, labels):
+        for p in self.model.model.encoder.parameters():
+            p.requires_grad = False
         out = self.model(
             input_ids=input_ids,
             labels=labels,

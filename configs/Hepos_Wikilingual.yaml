@@ -35,7 +35,7 @@ model:
 
 training:
   checkpoint_path: "checkpoints"
-  warmup: 8000
+  warmup: 1
   patience: 5
   score: rouge-L
   scheduler: none
