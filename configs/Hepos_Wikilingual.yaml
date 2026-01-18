@@ -23,25 +23,33 @@ dataset:
     path: datasets/Wikilingual-dataset/test.json
   batch_size: 32
   num_workers: 8
+  max_src_len: 2048
+  max_tgt_len: 512
+
 
 model:
-  name: HEPOS_BART_Wiki
-  architecture: HEPOSBartSummarizer
-  pretrained_name: facebook/bart-large-cnn
-  stride: 8
+  name: HeposModel_Wililingual    
+  architecture: HeposModel 
+  d_model: 768
+  encoder:
+    num_layers: 4
+    num_heads: 8
+    block_size: 128
+
+  decoder:
+    num_layers: 4
+    num_heads: 8
+    hepos_stride: 16
   device: cuda
 
-
-
 training:
-  checkpoint_path: "checkpoints"
-  warmup: 1
-  patience: 5
+  checkpoint_path: checkpoints
   score: rouge-L
-  scheduler: none
-  batch_size: 4
   learning_rate: 0.0001
-  epochs: 20
-  beam_size: 4
+  warmup: 10000
+  patience: 5
+  max_epochs: 50
+  grad_clip: 0.1
+
 
 task: TextSumTask

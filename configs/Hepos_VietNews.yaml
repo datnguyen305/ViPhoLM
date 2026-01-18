@@ -23,40 +23,33 @@ dataset:
     path: datasets/VietNews-dataset/test.json
   batch_size: 32
   num_workers: 8
+  max_src_len: 2048
+  max_tgt_len: 512
+
 
 model:
-  name: HEPOS_Vietnews
-  architecture: HEPOSBaselineSummarizer
-  
+  name: HeposModel_VietNews    
+  architecture: HeposModel 
+  d_model: 768
   encoder:
-    d_model: 512
-    n_layers: 6
-    n_head: 8
-    ffn_hidden: 2048
-    drop_prob: 0.1
-    max_len: 256
+    num_layers: 4
+    num_heads: 12
+    block_size: 128
 
   decoder:
-    d_model: 512
-    n_layers: 6
-    n_head: 8
-    ffn_hidden: 2048
-    drop_prob: 0.1
-    max_len: 256
-    stride: 8   # = n_head (khuyến nghị paper)
-
+    num_layers: 4
+    num_heads: 12
+    hepos_stride: 16
   device: cuda
 
 training:
-  checkpoint_path: "checkpoints"
-  warmup: 8000
-  patience: 5
+  checkpoint_path: checkpoints
   score: rouge-L
-  batch_size: 4
-  gradient_accumulation_steps: 8   # batch effective = 32
   learning_rate: 0.0001
-  epochs: 20
-  beam_size: 4
-  length_penalty: 2.0
+  warmup: 10000
+  patience: 5
+  max_epochs: 50
+  grad_clip: 0.1
+
 
 task: TextSumTask
