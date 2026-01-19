@@ -9,8 +9,7 @@ pointer_generator:
   checkpoint: checkpoints/pointer_generator_Wikilingual/best_model.pth
 
 inference:
-  threshold: 0.2
+  threshold: 0.5
   soft_coeff: 0.0
-  coverage_beta: 10
   batch_size: 1
   output_dir: checkpoints/bottom_up_Wikilingual

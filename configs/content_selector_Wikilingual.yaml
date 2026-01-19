@@ -43,7 +43,7 @@ training:
   optimizer: adam
   loss: bce
   warmup: 1000
-  patience: 1
+  patience: 5
   score: f1
   checkpoint_path: checkpoints/content_selector
   save_name: content_selector_phobert.pt
