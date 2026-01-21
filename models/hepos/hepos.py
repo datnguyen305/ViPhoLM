@@ -4,6 +4,10 @@ import torch.nn as nn
 from builders.model_builder import META_ARCHITECTURE
 from vocabs.vocab import Vocab
 
+
+# ============================================================
+# LayerNorm
+# ============================================================
 class LayerNorm(nn.Module):
     def __init__(self, d_model, eps=1e-6):
         super().__init__()
@@ -17,6 +21,9 @@ class LayerNorm(nn.Module):
         return self.gamma * (x - mean) / torch.sqrt(var + self.eps) + self.beta
 
 
+# ============================================================
+# Feed Forward
+# ============================================================
 class PositionwiseFeedForward(nn.Module):
     def __init__(self, d_model, hidden, dropout):
         super().__init__()
@@ -24,52 +31,49 @@ class PositionwiseFeedForward(nn.Module):
             nn.Linear(d_model, hidden),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden, d_model)
+            nn.Linear(hidden, d_model),
         )
 
     def forward(self, x):
         return self.net(x)
 
-class FullMultiHeadAttention(nn.Module):
-    def __init__(self, d_model, n_head, dropout=0.1):
+
+# ============================================================
+# Longformer-style Local Self Attention (Encoder)
+# ============================================================
+class LongformerSelfAttention(nn.Module):
+    """
+    Sliding-window self-attention (SAFE, no full O(L^2))
+    """
+    def __init__(self, d_model, n_head, window_size, dropout=0.1):
         super().__init__()
-        assert d_model % n_head == 0
+        self.attn = nn.MultiheadAttention(
+            d_model, n_head, dropout=dropout, batch_first=True
+        )
+        self.window = window_size
 
-        self.n_head = n_head
-        self.d_head = d_model // n_head
+    def forward(self, x):
+        # x: (B, L, D)
+        B, L, D = x.size()
+        outputs = []
 
-        self.w_q = nn.Linear(d_model, d_model)
-        self.w_k = nn.Linear(d_model, d_model)
-        self.w_v = nn.Linear(d_model, d_model)
-        self.w_o = nn.Linear(d_model, d_model)
+        for i in range(0, L, self.window):
+            s = max(0, i - self.window)
+            e = min(L, i + self.window)
 
-        self.dropout = nn.Dropout(dropout)
+            q = x[:, i:i + self.window]
+            k = x[:, s:e]
+            v = x[:, s:e]
 
-    def forward(self, q, k, v, mask=None):
-        B, Tq, _ = q.size()
-        Tk = k.size(1)
+            out, _ = self.attn(q, k, v)
+            outputs.append(out)
 
-        Q = self.w_q(q).view(B, Tq, self.n_head, self.d_head).transpose(1, 2)
-        K = self.w_k(k).view(B, Tk, self.n_head, self.d_head).transpose(1, 2)
-        V = self.w_v(v).view(B, Tk, self.n_head, self.d_head).transpose(1, 2)
-
-        scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_head)
-
-        if mask is not None:
-            scores = scores.masked_fill(
-                mask == 0,
-                torch.finfo(scores.dtype).min
-            )
+        return torch.cat(outputs, dim=1)
 
 
-        attn = torch.softmax(scores, dim=-1)
-        attn = self.dropout(attn)
-
-        out = torch.matmul(attn, V)
-        out = out.transpose(1, 2).contiguous().view(B, Tq, -1)
-
-        return self.w_o(out)
-
+# ============================================================
+# HEPOS Cross Attention (Encoder → Decoder)
+# ============================================================
 class HeposMultiHeadAttention(nn.Module):
     def __init__(self, d_model, n_head, stride, dropout=0.1):
         super().__init__()
@@ -88,6 +92,7 @@ class HeposMultiHeadAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, q, k, v, src_mask=None):
+        # q: (B, Tq, D), k/v: (B, Tk, D)
         B, Tq, _ = q.size()
         Tk = k.size(1)
         device = q.device
@@ -100,6 +105,7 @@ class HeposMultiHeadAttention(nn.Module):
 
         for h in range(self.n_head):
             idx = torch.arange(h, Tk, self.stride, device=device)
+
             Qh = Q[:, h:h+1]
             Kh = K[:, h:h+1, idx]
             Vh = V[:, h:h+1, idx]
@@ -108,38 +114,45 @@ class HeposMultiHeadAttention(nn.Module):
 
             if src_mask is not None:
                 mask_h = src_mask[..., idx]
-                scores = scores.masked_fill(mask_h == 0, 
-                torch.finfo(scores.dtype).min)
+                scores = scores.masked_fill(
+                    mask_h == 0,
+                    torch.finfo(scores.dtype).min
+                )
 
             attn = torch.softmax(scores, dim=-1)
             attn = self.dropout(attn)
             out = torch.matmul(attn, Vh)
-
             outputs.append(out)
 
         out = torch.cat(outputs, dim=1)
         out = out.transpose(1, 2).contiguous().view(B, Tq, -1)
-
         return self.w_o(out)
 
+
+# ============================================================
+# Encoder / Decoder Layers
+# ============================================================
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model, ffn_hidden, n_head, dropout):
+    def __init__(self, d_model, ffn_hidden, n_head, dropout, window):
         super().__init__()
-        self.attn = FullMultiHeadAttention(d_model, n_head, dropout)
+        self.attn = LongformerSelfAttention(d_model, n_head, window, dropout)
         self.norm1 = LayerNorm(d_model)
         self.ffn = PositionwiseFeedForward(d_model, ffn_hidden, dropout)
         self.norm2 = LayerNorm(d_model)
         self.drop = nn.Dropout(dropout)
 
-    def forward(self, x, src_mask):
-        x = self.norm1(x + self.drop(self.attn(x, x, x, src_mask)))
+    def forward(self, x):
+        x = self.norm1(x + self.drop(self.attn(x)))
         x = self.norm2(x + self.drop(self.ffn(x)))
         return x
+
 
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, ffn_hidden, n_head, dropout, stride):
         super().__init__()
-        self.self_attn = FullMultiHeadAttention(d_model, n_head, dropout)
+        self.self_attn = nn.MultiheadAttention(
+            d_model, n_head, dropout=dropout, batch_first=True
+        )
         self.norm1 = LayerNorm(d_model)
 
         self.cross_attn = HeposMultiHeadAttention(d_model, n_head, stride, dropout)
@@ -150,233 +163,158 @@ class DecoderLayer(nn.Module):
 
         self.drop = nn.Dropout(dropout)
 
-    def forward(self, x, enc, trg_mask, src_mask):
-        x = self.norm1(x + self.drop(self.self_attn(x, x, x, trg_mask)))
+    def forward(self, x, enc, src_mask):
+        T = x.size(1)
+        causal_mask = torch.triu(
+            torch.ones(T, T, device=x.device),
+            diagonal=1
+        ).bool()
+
+        attn_out, _ = self.self_attn(x, x, x, attn_mask=causal_mask)
+        x = self.norm1(x + self.drop(attn_out))
         x = self.norm2(x + self.drop(self.cross_attn(x, enc, enc, src_mask)))
         x = self.norm3(x + self.drop(self.ffn(x)))
         return x
 
+
+# ============================================================
+# MAIN MODEL
+# ============================================================
 @META_ARCHITECTURE.register()
-class HeposTransformerSummarizer(nn.Module):
+class HeposLongformerSummarizer(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super().__init__()
+        self.config = config
+        self.vocab = vocab
+
         self.d_model = config.d_model
-        vocab_size = len(vocab)
         self.pad = vocab.pad_idx
 
-        self.emb = nn.Embedding(vocab.vocab_size, config.d_model, padding_idx=self.pad)
-        self.pos = nn.Embedding(config.max_len, config.d_model)
+        self.tok_emb = nn.Embedding(vocab.vocab_size, self.d_model, padding_idx=self.pad)
+        self.pos_emb = nn.Embedding(config.max_len, self.d_model)
+        self.scale = math.sqrt(self.d_model)
 
         self.encoder = nn.ModuleList([
             EncoderLayer(
-                config.d_model,
+                self.d_model,
                 config.ffn_hidden,
                 config.n_head,
-                config.drop_prob
+                config.drop_prob,
+                config.encoder.window_size,
             )
-            for _ in range(config.n_layers)
+            for _ in range(config.encoder.n_layers)
         ])
 
         self.decoder = nn.ModuleList([
             DecoderLayer(
-                config.d_model,
+                self.d_model,
                 config.ffn_hidden,
                 config.n_head,
                 config.drop_prob,
-                config.stride
+                config.decoder.hepos_stride,
             )
-            for _ in range(config.n_layers)
+            for _ in range(config.decoder.n_layers)
         ])
 
-        self.fc = nn.Linear(config.d_model, vocab.vocab_size)
+        self.fc = nn.Linear(self.d_model, vocab.vocab_size)
+
         self.loss_fn = nn.CrossEntropyLoss(
             ignore_index=self.pad,
-            label_smoothing=0.1   
+            label_smoothing=0.05,
         )
 
+    # --------------------------------------------------------
     def make_src_mask(self, src):
         return (src != self.pad).unsqueeze(1).unsqueeze(2)
 
-    def make_trg_mask(self, trg):
-        T = trg.size(1)
-        pad = (trg != self.pad).unsqueeze(1).unsqueeze(2)
-        causal = torch.tril(torch.ones(T, T, device=trg.device)).bool()
-        return pad & causal.unsqueeze(0).unsqueeze(1)
-
+    # --------------------------------------------------------
     def forward(self, src, trg):
+        """
+        TRAINING (teacher forcing with SHIFT-RIGHT)
+        """
         B, S = src.size()
         T = trg.size(1)
 
-        pos_s = torch.arange(S, device=src.device)
-        pos_t = torch.arange(T, device=trg.device)
+        src = src[:, :self.config.max_len]
+        trg = trg[:, :self.config.max_len]
 
-        enc = self.emb(src) + self.pos(pos_s)
-        dec = self.emb(trg) + self.pos(pos_t)
+        # ---- Encoder embedding ----
+        pos_s = torch.arange(src.size(1), device=src.device)
+        enc = self.tok_emb(src) * self.scale + self.pos_emb(pos_s)
 
         src_mask = self.make_src_mask(src)
-        trg_mask = self.make_trg_mask(trg)
-
         for layer in self.encoder:
-            enc = layer(enc, src_mask)
+            enc = layer(enc)
+
+        # ---- SHIFT RIGHT ----
+        bos = torch.full(
+            (B, 1),
+            self.vocab.bos_idx,
+            device=trg.device,
+            dtype=torch.long
+        )
+        dec_in = torch.cat([bos, trg[:, :-1]], dim=1)
+
+        pos_t = torch.arange(dec_in.size(1), device=trg.device)
+        dec = self.tok_emb(dec_in) * self.scale + self.pos_emb(pos_t)
 
         for layer in self.decoder:
-            dec = layer(dec, enc, trg_mask, src_mask)
+            dec = layer(dec, enc, src_mask)
 
-        out = self.fc(dec)
-        loss = self.loss_fn(out.view(-1, out.size(-1)), trg.view(-1))
-        return out, loss
+        logits = self.fc(dec)
+        loss = self.loss_fn(
+            logits.reshape(-1, logits.size(-1)),
+            trg.reshape(-1)
+        )
 
+        return logits, loss
+
+    # --------------------------------------------------------
     @torch.no_grad()
-    def predict(
-        self,
-        src: torch.Tensor,
-        max_len: int = None,
-        beam_size: int = 1
-    ):
+    def predict(self, src, max_len=256):
         """
-        src: [B, S]
-        return: [B, T]
+        GREEDY DECODING
         """
         self.eval()
-
         device = src.device
-        B = src.size(0)
 
-        max_len = max_len or self.config.decoder.max_len
-
-        if beam_size == 1:
-            return self._greedy_decode(src, max_len)
-        else:
-            return self._beam_search(src, max_len, beam_size)
-        
-    @torch.no_grad()
-    def _greedy_decode(self, src, max_len):
-        device = src.device
+        src = src[:, :self.config.max_len]
         B, S = src.size()
 
-        src_mask = self.make_src_mask(src)
-
-        # ----- encode -----
         pos_s = torch.arange(S, device=device)
-        enc = self.emb(src) + self.pos(pos_s)
+        enc = self.tok_emb(src) * self.scale + self.pos_emb(pos_s)
 
+        src_mask = self.make_src_mask(src)
         for layer in self.encoder:
-            enc = layer(enc, src_mask)
+            enc = layer(enc)
 
-        # ----- init decoder -----
         ys = torch.full(
             (B, 1),
             self.vocab.bos_idx,
-            dtype=torch.long,
-            device=device
+            device=device,
+            dtype=torch.long
         )
 
         finished = torch.zeros(B, dtype=torch.bool, device=device)
 
-        for _ in range(max_len):
-            T = ys.size(1)
-            pos_t = torch.arange(T, device=device)
-
-            dec = self.emb(ys) + self.pos(pos_t)
-            trg_mask = self.make_trg_mask(ys)
+        for step in range(max_len):
+            pos_t = torch.arange(ys.size(1), device=device)
+            dec = self.tok_emb(ys) * self.scale + self.pos_emb(pos_t)
 
             for layer in self.decoder:
-                dec = layer(dec, enc, trg_mask, src_mask)
+                dec = layer(dec, enc, src_mask)
 
             logits = self.fc(dec)
+
+            # tránh EOS quá sớm
+            if ys.size(1) == 1:
+                logits[:, -1, self.vocab.eos_idx] = -1e9
+
             next_token = logits[:, -1].argmax(dim=-1, keepdim=True)
-
             ys = torch.cat([ys, next_token], dim=1)
-            finished |= (next_token.squeeze(1) == self.vocab.eos_idx)
 
+            finished |= (next_token.squeeze(1) == self.vocab.eos_idx)
             if finished.all():
                 break
 
-        return ys[:, 1:]   # bỏ BOS
-
-    torch.no_grad()
-    def _beam_search(self, src, max_len, beam_size):
-        assert src.size(0) == 1, "Beam search supports batch_size = 1 only"
-
-        device = src.device
-        vocab_size = self.vocab.vocab_size
-        alpha = getattr(self.config, "length_penalty", 2.0)
-
-        src_mask = self.make_src_mask(src)
-        S = src.size(1)
-
-        # ----- encode -----
-        pos_s = torch.arange(S, device=device)
-        enc = self.emb(src) + self.pos(pos_s)
-
-        for layer in self.encoder:
-            enc = layer(enc, src_mask)
-
-        beams = torch.full(
-            (beam_size, 1),
-            self.vocab.bos_idx,
-            dtype=torch.long,
-            device=device
-        )
-
-        beam_scores = torch.zeros(beam_size, device=device)
-        beam_scores[1:] = -1e9
-
-        finished = []
-
-        for step in range(max_len):
-            T = beams.size(1)
-            pos_t = torch.arange(T, device=device)
-
-            dec = self.emb(beams) + self.pos(pos_t)
-            trg_mask = self.make_trg_mask(beams)
-
-            enc_rep = enc.repeat(beam_size, 1, 1)
-            src_mask_rep = src_mask.repeat(beam_size, 1, 1, 1)
-
-            for layer in self.decoder:
-                dec = layer(dec, enc_rep, trg_mask, src_mask_rep)
-
-            logits = self.fc(dec)
-            log_probs = torch.log_softmax(logits[:, -1], dim=-1)
-
-            scores = beam_scores.unsqueeze(1) + log_probs
-            scores = scores.view(-1)
-
-            top_scores, top_ids = scores.topk(beam_size)
-
-            next_beams = []
-            next_scores = []
-
-            for score, idx in zip(top_scores, top_ids):
-                beam_id = idx // vocab_size
-                token_id = idx % vocab_size
-
-                new_beam = torch.cat(
-                    [beams[beam_id], token_id.view(1)],
-                    dim=0
-                )
-
-                if token_id.item() == self.vocab.eos_idx:
-                    length = new_beam.size(0)
-                    lp = ((5 + length) ** alpha) / ((5 + 1) ** alpha)
-                    finished.append((new_beam, score / lp))
-                else:
-                    next_beams.append(new_beam)
-                    next_scores.append(score)
-
-                if len(next_beams) == beam_size:
-                    break
-
-            if not next_beams:
-                break
-
-            beams = torch.stack(next_beams)
-            beam_scores = torch.stack(next_scores)
-
-        if finished:
-            finished.sort(key=lambda x: x[1], reverse=True)
-            return finished[0][0][1:].unsqueeze(0)
-
-        best = beam_scores.argmax()
-        return beams[best][1:].unsqueeze(0)
+        return ys[:, 1:]

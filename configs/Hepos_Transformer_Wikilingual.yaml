@@ -20,44 +20,34 @@ dataset:
   test: 
     type: TextSumDataset
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 32
+  batch_size: 16
   num_workers: 4
 
 model:
-  name: Hepos_Transformer_Wikilingual
-  architecture: TransformerHeposModel
-  d_model: 256
-  n_layers: 4
+  name: Hepos_Longformer_Wikilingual
+  architecture: HeposLongformerSummarizer
+  d_model: 512
+  ffn_hidden: 2048
   n_head: 8
-  ffn_hidden: 1024
   drop_prob: 0.1
-  max_len: 64
+  max_len: 2048
+
   encoder:
-    d_model: 256
-    n_head: 8
-    ffn_hidden: 1024
-    drop_prob: 0.1
-    n_layers: 4
-    max_len: 64
-    device: cuda
+    n_layers: 6
+    window_size: 512
+
   decoder:
-    d_model: 256
-    n_head: 8
-    ffn_hidden: 1024
-    drop_prob: 0.1
-    n_layers: 4
-    max_len: 64
-    device: cuda
-    stride: 2
-  label_smoothing: 0.1
+    n_layers: 6
+    hepos_stride: 8
+
   device: cuda
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.0001
-  lr_coverage: 0.0001
   warmup: 4000
-  patience: 10
+  patience: 5
   score: rouge-L
+  learning_rate: 0.0001
+  epochs: 20
 
 task: TextSumTask

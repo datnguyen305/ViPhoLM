@@ -10,7 +10,7 @@ from .closedbook.closedbook import ClosedbookSummarization
 # from .transformer_seal.model.transformer_seal import TransformerSealModel
 # from .seal_closedbook.seal_closedbook import ClosedbookSeal
 from .fast_seal.copy_sum import CopySummSeal
-from .hepos.hepos import HeposTransformerSummarizer
+from .hepos.hepos import HeposLongformerSummarizer
 # from .hat.hat_model import HATModel
 from .seneca.seneca import SENECA_Baseline
 from .longformer.longformer_encoder_decoder import LongformerEncoderDecoderModel

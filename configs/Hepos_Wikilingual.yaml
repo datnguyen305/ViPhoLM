@@ -1,4 +1,3 @@
-
 vocab:
   type: Vocab
   path:
@@ -21,35 +20,34 @@ dataset:
   test: 
     type: TextSumDataset
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 32
-  num_workers: 8
-
+  batch_size: 16
+  num_workers: 4
 
 model:
-  name: HeposTransformer_Wikilingual    
-  architecture: HeposTransformerSummarizer
+  name: Hepos_Wikilingual
+  architecture: HeposLongformerSummarizer
   d_model: 512
-  n_head: 8
-  n_layers: 6
   ffn_hidden: 2048
+  n_head: 8
   drop_prob: 0.1
-  stride: 4
-  max_len: 4096
-  length_penalty: 2.0
+  max_len: 2048
+
+  encoder:
+    n_layers: 6
+    window_size: 512
+
+  decoder:
+    n_layers: 6
+    hepos_stride: 8
+
   device: cuda
 
 training:
-  checkpoint_path: checkpoints
-  score: rouge-L
-  learning_rate: 0.0001
+  checkpoint_path: "checkpoints"
   warmup: 4000
   patience: 5
-
-optimizer:
-  name: adam
-  betas: [0.9, 0.98]
-  eps: 0.0000001
-  weight_decay: 0.01
-
+  score: rouge-L
+  learning_rate: 0.15
+  epochs: 20
 
 task: TextSumTask
