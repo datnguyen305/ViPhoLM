@@ -1,396 +1,272 @@
 import math
 import torch
-from torch.utils.checkpoint import checkpoint
 import torch.nn as nn
-from typing import Dict
-from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
+from vocabs.vocab import Vocab
 
-# sinkhorn utilities
-def sinkhorn(log_alpha, n_iters=5):
-    """
-    log_alpha: (B, N, N)
-    return: doubly-stochastic matrix (NO grad)
-    """
-    for _ in range(n_iters):
-        log_alpha = log_alpha - torch.logsumexp(log_alpha, dim=-1, keepdim=True)
-        log_alpha = log_alpha - torch.logsumexp(log_alpha, dim=-2, keepdim=True)
-    return torch.exp(log_alpha)
-
-# sinkhorn self attention 
-class SinkhornSelfAttention(nn.Module):
-    """
-    Efficient Sinkhorn Self-Attention (Encoder)
-    - Block-based
-    - Hard permutation (argmax)
-    - No gradient through permutation
-    """
-
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        block_size: int = 256,
-        sinkhorn_iters: int = 5,
-        dropout: float = 0.1
-    ):
+class LayerNorm(nn.Module):
+    def __init__(self, d_model, eps=1e-6):
         super().__init__()
-        assert embed_dim % num_heads == 0
-
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
-        self.block_size = block_size
-        self.sinkhorn_iters = sinkhorn_iters
-        self.scale = self.head_dim ** -0.5
-
-        self.q_proj = nn.Linear(embed_dim, embed_dim)
-        self.k_proj = nn.Linear(embed_dim, embed_dim)
-        self.v_proj = nn.Linear(embed_dim, embed_dim)
-        self.out_proj = nn.Linear(embed_dim, embed_dim)
-
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x: (src_len, B, D)
-        """
-        src_len, B, D = x.shape
-        assert src_len % self.block_size == 0, \
-            f"src_len ({src_len}) must be divisible by block_size ({self.block_size})"
-
-        num_blocks = src_len // self.block_size
-
-        # ============================================================
-        # 1️⃣ BLOCK REPRESENTATION (mean pooling)
-        # ============================================================
-        x_blocks = (
-            x.reshape(num_blocks, self.block_size, B, D)
-             .mean(dim=1)                      # (num_blocks, B, D)
-             .transpose(0, 1)                  # (B, num_blocks, D)
-        )
-
-        # ============================================================
-        # 2️⃣ SINKHORN PERMUTATION (NO GRAD)
-        # ============================================================
-        with torch.no_grad():
-            q_blk = self.q_proj(x_blocks)
-            k_blk = self.k_proj(x_blocks)
-
-            logits = torch.matmul(
-                q_blk, k_blk.transpose(-2, -1)
-            ) / math.sqrt(D)                   # (B, num_blocks, num_blocks)
-
-            P = sinkhorn(logits, self.sinkhorn_iters)
-            perm = P.argmax(dim=-1)             # (B, num_blocks)
-
-        # ============================================================
-        # 3️⃣ HARD BLOCK REORDER (FAST INDEXING)
-        # ============================================================
-        x_blocks_full = (
-            x.reshape(num_blocks, self.block_size, B, D)
-             .permute(2, 0, 1, 3)               # (B, num_blocks, block, D)
-        )
-
-        x_perm_blocks = torch.stack(
-            [x_blocks_full[b, perm[b]] for b in range(B)],
-            dim=0
-        )                                       # (B, num_blocks, block, D)
-
-        x_perm = (
-            x_perm_blocks
-            .permute(1, 2, 0, 3)
-            .reshape(src_len, B, D)
-        )
-
-        # ============================================================
-        # 4️⃣ LOCAL + NEIGHBOR SELF-ATTENTION
-        # ============================================================
-        q = self.q_proj(x_perm)
-        k = self.k_proj(x_perm)
-        v = self.v_proj(x_perm)
-
-        q = q.transpose(0, 1).reshape(B, src_len, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.transpose(0, 1).reshape(B, src_len, self.num_heads, self.head_dim).transpose(1, 2)
-        v = v.transpose(0, 1).reshape(B, src_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-
-        out = torch.zeros_like(q)   # (B, H, src_len, head_dim)
-
-        for b in range(num_blocks):
-            s = b * self.block_size
-            e = s + self.block_size
-
-            q_blk = q[:, :, s:e]          # (B, H, block, D)
-            k_blk = k[:, :, s:e]
-            v_blk = v[:, :, s:e]
-
-            scores = torch.matmul(q_blk, k_blk.transpose(-2, -1)) * self.scale
-            attn = torch.softmax(scores, dim=-1)
-            attn = self.dropout(attn)
-
-            out_blk = torch.matmul(attn, v_blk)  # (B, H, block, D)
-
-            out[:, :, s:e] = out_blk
-
-        out = (
-            out.transpose(1, 2)                 # (B, src_len, H, D)
-            .reshape(B, src_len, self.embed_dim)
-            .transpose(0, 1)                 # (src_len, B, D)
-        )
-        return self.out_proj(out)
-
-
-class SinkhornEncoderLayer(nn.Module):
-    def __init__(self, embed_dim, num_heads, block_size):
-        super().__init__()
-        self.attn = SinkhornSelfAttention(embed_dim, num_heads, block_size)
-        self.ffn = nn.Sequential(
-            nn.Linear(embed_dim, 4 * embed_dim),
-            nn.ReLU(),
-            nn.Linear(4 * embed_dim, embed_dim)
-        )
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim)
+        self.gamma = nn.Parameter(torch.ones(d_model))
+        self.beta = nn.Parameter(torch.zeros(d_model))
+        self.eps = eps
 
     def forward(self, x):
-        x = self.norm1(x + self.attn(x))
-        x = self.norm2(x + self.ffn(x))
-        return x
+        mean = x.mean(-1, keepdim=True)
+        var = x.var(-1, unbiased=False, keepdim=True)
+        return self.gamma * (x - mean) / torch.sqrt(var + self.eps) + self.beta
 
 
-class SinkhornEncoder(nn.Module):
-    def __init__(self, vocab_size, embed_dim, num_layers, num_heads, block_size, pad_id=0):
+class PositionwiseFeedForward(nn.Module):
+    def __init__(self, d_model, hidden, dropout):
         super().__init__()
-        self.embed = nn.Embedding(vocab_size, embed_dim, padding_idx=pad_id)
-        self.layers = nn.ModuleList([
-            SinkhornEncoderLayer(embed_dim, num_heads, block_size)
-            for _ in range(num_layers)
-        ])
-        self.block_size = block_size
-        self.pad_id = pad_id
+        self.net = nn.Sequential(
+            nn.Linear(d_model, hidden),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden, d_model)
+        )
 
-    def forward(self, src_tokens):
-        """
-        src_tokens: (B, src_len)
-        """
-        B, src_len = src_tokens.shape
+    def forward(self, x):
+        return self.net(x)
 
-        # 🔥 PAD TO MULTIPLE OF block_size
-        pad_len = (self.block_size - src_len % self.block_size) % self.block_size
-        if pad_len > 0:
-            pad = torch.full(
-                (B, pad_len),
-                self.pad_id,
-                dtype=src_tokens.dtype,
-                device=src_tokens.device
-            )
-            src_tokens = torch.cat([src_tokens, pad], dim=1)
-
-        x = self.embed(src_tokens).transpose(0, 1)
-
-        for layer in self.layers:
-            x = checkpoint(layer, x, use_reentrant=False)
-
-
-        return x
-
-
-class HeposCrossAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads, stride, dropout=0.1):
+class FullMultiHeadAttention(nn.Module):
+    def __init__(self, d_model, n_head, dropout=0.1):
         super().__init__()
-        assert embed_dim % num_heads == 0
+        assert d_model % n_head == 0
 
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
-        self.stride = stride
-        self.scale = self.head_dim ** -0.5
+        self.n_head = n_head
+        self.d_head = d_model // n_head
 
-        self.q_proj = nn.Linear(embed_dim, embed_dim)
-        self.k_proj = nn.Linear(embed_dim, embed_dim)
-        self.v_proj = nn.Linear(embed_dim, embed_dim)
-        self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.w_q = nn.Linear(d_model, d_model)
+        self.w_k = nn.Linear(d_model, d_model)
+        self.w_v = nn.Linear(d_model, d_model)
+        self.w_o = nn.Linear(d_model, d_model)
 
         self.dropout = nn.Dropout(dropout)
 
-    def build_mask(self, tgt_len, src_len, device):
-        mask = torch.zeros(self.num_heads, tgt_len, src_len, device=device, dtype=torch.bool)
-        pos = torch.arange(src_len, device=device)
-        for h in range(self.num_heads):
-            mask[h, :, ((pos - h) % self.stride) == 0] = True
-        return mask
+    def forward(self, q, k, v, mask=None):
+        B, Tq, _ = q.size()
+        Tk = k.size(1)
 
-    def forward(self, query, key, value):
-        """
-        query: (tgt_len, B, D)
-        key/value: (src_len, B, D)
-        """
-        tgt_len, B, _ = query.shape
-        src_len = key.size(0)
-        H = self.num_heads
-        D = self.head_dim
-        device = query.device
+        Q = self.w_q(q).view(B, Tq, self.n_head, self.d_head).transpose(1, 2)
+        K = self.w_k(k).view(B, Tk, self.n_head, self.d_head).transpose(1, 2)
+        V = self.w_v(v).view(B, Tk, self.n_head, self.d_head).transpose(1, 2)
 
-        # ---- project ----
-        q = self.q_proj(query).transpose(0, 1)      # (B, tgt_len, D)
-        k = self.k_proj(key).transpose(0, 1)        # (B, src_len, D)
-        v = self.v_proj(value).transpose(0, 1)      # (B, src_len, D)
+        scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_head)
 
-        q = q.reshape(B, tgt_len, H, D).transpose(1, 2)  # (B, H, tgt_len, D)
-        k = k.reshape(B, src_len, H, D).transpose(1, 2)  # (B, H, src_len, D)
-        v = v.reshape(B, src_len, H, D).transpose(1, 2)
-
-        out = torch.zeros(B, H, tgt_len, D, device=device)
-
-        # ---- HEPOS STRIDED ATTENTION (NO FULL QKᵀ) ----
-        for h in range(H):
-            idx = torch.arange(h, src_len, self.stride, device=device)
-            k_h = k[:, h, idx]          # (B, src_len/stride, D)
-            v_h = v[:, h, idx]
-
-            q_h = q[:, h]               # (B, tgt_len, D)
-
-            scores = torch.matmul(q_h, k_h.transpose(-2, -1)) * self.scale
-            attn = torch.softmax(scores, dim=-1)
-            attn = self.dropout(attn)
-
-            out[:, h] = torch.matmul(attn, v_h)
-
-        # ---- merge heads ----
-        out = (
-            out.transpose(1, 2)                 # (B, tgt_len, H, D)
-              .reshape(B, tgt_len, self.embed_dim)
-              .transpose(0, 1)                 # (tgt_len, B, D)
-        )
-
-        return self.out_proj(out)
-
-
-
-class HeposDecoderLayer(nn.Module):
-    def __init__(self, embed_dim, num_heads, stride):
-        super().__init__()
-        self.self_attn = nn.MultiheadAttention(embed_dim, num_heads)
-        self.cross_attn = HeposCrossAttention(embed_dim, num_heads, stride)
-
-        self.ffn = nn.Sequential(
-            nn.Linear(embed_dim, 4 * embed_dim),
-            nn.ReLU(),
-            nn.Linear(4 * embed_dim, embed_dim)
-        )
-
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim)
-        self.norm3 = nn.LayerNorm(embed_dim)
-
-    def forward(self, x, encoder_out):
-        tgt_len = x.size(0)
-        causal_mask = torch.triu(
-            torch.ones(tgt_len, tgt_len, device=x.device),
-            diagonal=1
-        ).bool()
-
-        x = self.norm1(x + self.self_attn(x, x, x, attn_mask=causal_mask)[0])
-        x = self.norm2(x + self.cross_attn(x, encoder_out, encoder_out))
-        x = self.norm3(x + self.ffn(x))
-        return x
-
-
-class HeposDecoder(nn.Module):
-    def __init__(self, vocab_size, embed_dim, num_layers, num_heads, stride):
-        super().__init__()
-        self.embed = nn.Embedding(vocab_size, embed_dim)
-        self.layers = nn.ModuleList([
-            HeposDecoderLayer(embed_dim, num_heads, stride)
-            for _ in range(num_layers)
-        ])
-        self.lm_head = nn.Linear(embed_dim, vocab_size)
-
-    def forward(self, tgt_tokens, encoder_out):
-        x = self.embed(tgt_tokens).transpose(0, 1)
-        for layer in self.layers:
-            x = layer(x, encoder_out)
-        return self.lm_head(x.transpose(0, 1))
-
-@META_ARCHITECTURE.register()
-class HeposModel(nn.Module):
-    """
-    HEPOS baseline for long document summarization
-    """
-
-    def __init__(self, config, vocab: Vocab):
-        super().__init__()
-
-        self.d_model = config.d_model
-        vocab_size = len(vocab)
-
-        self.encoder = SinkhornEncoder(
-            vocab_size=vocab_size,
-            embed_dim=config.d_model,
-            num_layers=config.encoder.num_layers,
-            num_heads=config.encoder.num_heads,
-            block_size=config.encoder.block_size,
-        )
-
-        self.decoder = HeposDecoder(
-            vocab_size=vocab_size,
-            embed_dim=config.d_model,
-            num_layers=config.decoder.num_layers,
-            num_heads=config.decoder.num_heads,
-            stride=config.decoder.hepos_stride,
-        )
-
-    def forward(self, input_ids, labels=None):
-        """
-        input_ids: Tensor[B, src_len]
-        labels: Tensor[B, tgt_len] or None
-        """
-
-        # ---- Encoder ----
-        enc_out = self.encoder(input_ids)
-
-        # ---- Decoder ----
-        if labels is not None:
-            # teacher forcing
-            logits = self.decoder(labels[:, :-1], enc_out)
-        else:
-            logits = self.decoder(input_ids, enc_out)
-
-        # ---- Loss ----
-        loss = None
-        if labels is not None:
-            loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0)
-            loss = loss_fn(
-                logits.reshape(-1, logits.size(-1)),
-                labels[:, 1:].reshape(-1)
+        if mask is not None:
+            scores = scores.masked_fill(
+                mask == 0,
+                torch.finfo(scores.dtype).min
             )
 
-        return logits, loss
 
+        attn = torch.softmax(scores, dim=-1)
+        attn = self.dropout(attn)
+
+        out = torch.matmul(attn, V)
+        out = out.transpose(1, 2).contiguous().view(B, Tq, -1)
+
+        return self.w_o(out)
+
+class HeposMultiHeadAttention(nn.Module):
+    def __init__(self, d_model, n_head, stride, dropout=0.1):
+        super().__init__()
+        assert d_model % n_head == 0
+        assert stride > 0
+
+        self.n_head = n_head
+        self.d_head = d_model // n_head
+        self.stride = stride
+
+        self.w_q = nn.Linear(d_model, d_model)
+        self.w_k = nn.Linear(d_model, d_model)
+        self.w_v = nn.Linear(d_model, d_model)
+        self.w_o = nn.Linear(d_model, d_model)
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, q, k, v, src_mask=None):
+        B, Tq, _ = q.size()
+        Tk = k.size(1)
+        device = q.device
+
+        Q = self.w_q(q).view(B, Tq, self.n_head, self.d_head).transpose(1, 2)
+        K = self.w_k(k).view(B, Tk, self.n_head, self.d_head).transpose(1, 2)
+        V = self.w_v(v).view(B, Tk, self.n_head, self.d_head).transpose(1, 2)
+
+        outputs = []
+
+        for h in range(self.n_head):
+            idx = torch.arange(h, Tk, self.stride, device=device)
+            Qh = Q[:, h:h+1]
+            Kh = K[:, h:h+1, idx]
+            Vh = V[:, h:h+1, idx]
+
+            scores = torch.matmul(Qh, Kh.transpose(-2, -1)) / math.sqrt(self.d_head)
+
+            if src_mask is not None:
+                mask_h = src_mask[..., idx]
+                scores = scores.masked_fill(mask_h == 0, 
+                torch.finfo(scores.dtype).min)
+
+            attn = torch.softmax(scores, dim=-1)
+            attn = self.dropout(attn)
+            out = torch.matmul(attn, Vh)
+
+            outputs.append(out)
+
+        out = torch.cat(outputs, dim=1)
+        out = out.transpose(1, 2).contiguous().view(B, Tq, -1)
+
+        return self.w_o(out)
+
+class EncoderLayer(nn.Module):
+    def __init__(self, d_model, ffn_hidden, n_head, dropout):
+        super().__init__()
+        self.attn = FullMultiHeadAttention(d_model, n_head, dropout)
+        self.norm1 = LayerNorm(d_model)
+        self.ffn = PositionwiseFeedForward(d_model, ffn_hidden, dropout)
+        self.norm2 = LayerNorm(d_model)
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, x, src_mask):
+        x = self.norm1(x + self.drop(self.attn(x, x, x, src_mask)))
+        x = self.norm2(x + self.drop(self.ffn(x)))
+        return x
+
+class DecoderLayer(nn.Module):
+    def __init__(self, d_model, ffn_hidden, n_head, dropout, stride):
+        super().__init__()
+        self.self_attn = FullMultiHeadAttention(d_model, n_head, dropout)
+        self.norm1 = LayerNorm(d_model)
+
+        self.cross_attn = HeposMultiHeadAttention(d_model, n_head, stride, dropout)
+        self.norm2 = LayerNorm(d_model)
+
+        self.ffn = PositionwiseFeedForward(d_model, ffn_hidden, dropout)
+        self.norm3 = LayerNorm(d_model)
+
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, x, enc, trg_mask, src_mask):
+        x = self.norm1(x + self.drop(self.self_attn(x, x, x, trg_mask)))
+        x = self.norm2(x + self.drop(self.cross_attn(x, enc, enc, src_mask)))
+        x = self.norm3(x + self.drop(self.ffn(x)))
+        return x
+
+@META_ARCHITECTURE.register()
+class HeposTransformerSummarizer(nn.Module):
+    def __init__(self, config, vocab: Vocab):
+        super().__init__()
+        self.d_model = config.d_model
+        vocab_size = len(vocab)
+        self.pad = vocab.pad_idx
+
+        self.emb = nn.Embedding(vocab.vocab_size, config.d_model, padding_idx=self.pad)
+        self.pos = nn.Embedding(config.max_len, config.d_model)
+
+        self.encoder = nn.ModuleList([
+            EncoderLayer(
+                config.d_model,
+                config.ffn_hidden,
+                config.n_head,
+                config.drop_prob
+            )
+            for _ in range(config.n_layers)
+        ])
+
+        self.decoder = nn.ModuleList([
+            DecoderLayer(
+                config.d_model,
+                config.ffn_hidden,
+                config.n_head,
+                config.drop_prob,
+                config.stride
+            )
+            for _ in range(config.n_layers)
+        ])
+
+        self.fc = nn.Linear(config.d_model, vocab.vocab_size)
+        self.loss_fn = nn.CrossEntropyLoss(
+            ignore_index=self.pad,
+            label_smoothing=0.1   
+        )
+
+    def make_src_mask(self, src):
+        return (src != self.pad).unsqueeze(1).unsqueeze(2)
+
+    def make_trg_mask(self, trg):
+        T = trg.size(1)
+        pad = (trg != self.pad).unsqueeze(1).unsqueeze(2)
+        causal = torch.tril(torch.ones(T, T, device=trg.device)).bool()
+        return pad & causal.unsqueeze(0).unsqueeze(1)
+
+    def forward(self, src, trg):
+        B, S = src.size()
+        T = trg.size(1)
+
+        pos_s = torch.arange(S, device=src.device)
+        pos_t = torch.arange(T, device=trg.device)
+
+        enc = self.emb(src) + self.pos(pos_s)
+        dec = self.emb(trg) + self.pos(pos_t)
+
+        src_mask = self.make_src_mask(src)
+        trg_mask = self.make_trg_mask(trg)
+
+        for layer in self.encoder:
+            enc = layer(enc, src_mask)
+
+        for layer in self.decoder:
+            dec = layer(dec, enc, trg_mask, src_mask)
+
+        out = self.fc(dec)
+        loss = self.loss_fn(out.view(-1, out.size(-1)), trg.view(-1))
+        return out, loss
+
+    @torch.no_grad()
     def predict(
         self,
-        input_ids: torch.Tensor,
-        max_len: int = 512,
-        bos_id: int = 1,
-        eos_id: int = 2
+        src: torch.Tensor,
+        max_len: int = None,
+        beam_size: int = 1
     ):
         """
-        input_ids: Tensor[B, src_len]
-        return: Tensor[B, generated_len]
+        src: [B, S]
+        return: [B, T]
         """
         self.eval()
 
-        B = input_ids.size(0)
-        device = input_ids.device
+        device = src.device
+        B = src.size(0)
 
-        # ---- Encode once ----
-        enc_out = self.encoder(input_ids)
+        max_len = max_len or self.config.decoder.max_len
 
-        # ---- Init decoder input ----
+        if beam_size == 1:
+            return self._greedy_decode(src, max_len)
+        else:
+            return self._beam_search(src, max_len, beam_size)
+        
+    @torch.no_grad()
+    def _greedy_decode(self, src, max_len):
+        device = src.device
+        B, S = src.size()
+
+        src_mask = self.make_src_mask(src)
+
+        # ----- encode -----
+        pos_s = torch.arange(S, device=device)
+        enc = self.emb(src) + self.pos(pos_s)
+
+        for layer in self.encoder:
+            enc = layer(enc, src_mask)
+
+        # ----- init decoder -----
         ys = torch.full(
             (B, 1),
-            bos_id,
+            self.vocab.bos_idx,
             dtype=torch.long,
             device=device
         )
@@ -398,13 +274,109 @@ class HeposModel(nn.Module):
         finished = torch.zeros(B, dtype=torch.bool, device=device)
 
         for _ in range(max_len):
-            logits = self.decoder(ys, enc_out)
+            T = ys.size(1)
+            pos_t = torch.arange(T, device=device)
+
+            dec = self.emb(ys) + self.pos(pos_t)
+            trg_mask = self.make_trg_mask(ys)
+
+            for layer in self.decoder:
+                dec = layer(dec, enc, trg_mask, src_mask)
+
+            logits = self.fc(dec)
             next_token = logits[:, -1].argmax(dim=-1, keepdim=True)
 
             ys = torch.cat([ys, next_token], dim=1)
+            finished |= (next_token.squeeze(1) == self.vocab.eos_idx)
 
-            finished |= (next_token.squeeze(1) == eos_id)
             if finished.all():
                 break
 
-        return ys
+        return ys[:, 1:]   # bỏ BOS
+
+    torch.no_grad()
+    def _beam_search(self, src, max_len, beam_size):
+        assert src.size(0) == 1, "Beam search supports batch_size = 1 only"
+
+        device = src.device
+        vocab_size = self.vocab.vocab_size
+        alpha = getattr(self.config, "length_penalty", 2.0)
+
+        src_mask = self.make_src_mask(src)
+        S = src.size(1)
+
+        # ----- encode -----
+        pos_s = torch.arange(S, device=device)
+        enc = self.emb(src) + self.pos(pos_s)
+
+        for layer in self.encoder:
+            enc = layer(enc, src_mask)
+
+        beams = torch.full(
+            (beam_size, 1),
+            self.vocab.bos_idx,
+            dtype=torch.long,
+            device=device
+        )
+
+        beam_scores = torch.zeros(beam_size, device=device)
+        beam_scores[1:] = -1e9
+
+        finished = []
+
+        for step in range(max_len):
+            T = beams.size(1)
+            pos_t = torch.arange(T, device=device)
+
+            dec = self.emb(beams) + self.pos(pos_t)
+            trg_mask = self.make_trg_mask(beams)
+
+            enc_rep = enc.repeat(beam_size, 1, 1)
+            src_mask_rep = src_mask.repeat(beam_size, 1, 1, 1)
+
+            for layer in self.decoder:
+                dec = layer(dec, enc_rep, trg_mask, src_mask_rep)
+
+            logits = self.fc(dec)
+            log_probs = torch.log_softmax(logits[:, -1], dim=-1)
+
+            scores = beam_scores.unsqueeze(1) + log_probs
+            scores = scores.view(-1)
+
+            top_scores, top_ids = scores.topk(beam_size)
+
+            next_beams = []
+            next_scores = []
+
+            for score, idx in zip(top_scores, top_ids):
+                beam_id = idx // vocab_size
+                token_id = idx % vocab_size
+
+                new_beam = torch.cat(
+                    [beams[beam_id], token_id.view(1)],
+                    dim=0
+                )
+
+                if token_id.item() == self.vocab.eos_idx:
+                    length = new_beam.size(0)
+                    lp = ((5 + length) ** alpha) / ((5 + 1) ** alpha)
+                    finished.append((new_beam, score / lp))
+                else:
+                    next_beams.append(new_beam)
+                    next_scores.append(score)
+
+                if len(next_beams) == beam_size:
+                    break
+
+            if not next_beams:
+                break
+
+            beams = torch.stack(next_beams)
+            beam_scores = torch.stack(next_scores)
+
+        if finished:
+            finished.sort(key=lambda x: x[1], reverse=True)
+            return finished[0][0][1:].unsqueeze(0)
+
+        best = beam_scores.argmax()
+        return beams[best][1:].unsqueeze(0)

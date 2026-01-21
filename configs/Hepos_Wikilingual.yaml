@@ -23,33 +23,33 @@ dataset:
     path: datasets/Wikilingual-dataset/test.json
   batch_size: 32
   num_workers: 8
-  max_src_len: 2048
-  max_tgt_len: 512
 
 
 model:
-  name: HeposModel_Wililingual    
-  architecture: HeposModel 
-  d_model: 768
-  encoder:
-    num_layers: 4
-    num_heads: 8
-    block_size: 128
-
-  decoder:
-    num_layers: 4
-    num_heads: 8
-    hepos_stride: 16
+  name: HeposTransformer_Wikilingual    
+  architecture: HeposTransformerSummarizer
+  d_model: 512
+  n_head: 8
+  n_layers: 6
+  ffn_hidden: 2048
+  drop_prob: 0.1
+  stride: 4
+  max_len: 4096
+  length_penalty: 2.0
   device: cuda
 
 training:
   checkpoint_path: checkpoints
   score: rouge-L
   learning_rate: 0.0001
-  warmup: 10000
+  warmup: 4000
   patience: 5
-  max_epochs: 50
-  grad_clip: 0.1
+
+optimizer:
+  name: adam
+  betas: [0.9, 0.98]
+  eps: 0.0000001
+  weight_decay: 0.01
 
 
 task: TextSumTask
