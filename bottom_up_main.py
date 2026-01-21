@@ -51,9 +51,8 @@ class BottomUpSummarizer:
         self.pg_config = load_config(cfg.pointer_generator.config)
 
         # ---- Inference params
-        self.threshold = cfg.inference.threshold  # fallback only
+        self.threshold = cfg.inference.threshold
         self.soft_coeff = cfg.inference.soft_coeff
-        self.coverage_beta = cfg.inference.coverage_beta
 
         # ---- Vocab
         self.logger.info("Building vocabulary...")
@@ -66,16 +65,10 @@ class BottomUpSummarizer:
             "Content Selector"
         )
 
-        # ---- Load optimized threshold from CS checkpoint
+        # ---- Load optimized threshold (optional)
         if isinstance(cs_ckpt, dict) and "pred_threshold" in cs_ckpt:
             self.threshold = cs_ckpt["pred_threshold"]
-            self.logger.info(
-                f"✓ Loaded optimized CS threshold = {self.threshold:.2f}"
-            )
-        else:
-            self.logger.warning(
-                "⚠ CS checkpoint has no pred_threshold, using config threshold"
-            )
+            self.logger.info(f"✓ Loaded optimized CS threshold = {self.threshold:.2f}")
 
         self.pointer_generator, _ = self._load_model(
             self.pg_config,
@@ -102,9 +95,6 @@ class BottomUpSummarizer:
         config.model.device = self.device
         model = build_model(config.model, self.vocab)
 
-        if not os.path.exists(ckpt_path):
-            raise FileNotFoundError(f"{name} checkpoint not found: {ckpt_path}")
-
         self.logger.info(f"-> Loading {name} from {ckpt_path}")
         ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)
 
@@ -113,74 +103,87 @@ class BottomUpSummarizer:
 
         return model.to(self.device).eval(), ckpt
 
+    def greedy_decode(self, model, input_ids, lengths,
+                  ext_idx, extra_zeros, max_len):
+
+        B, src_len = input_ids.size()
+        device = input_ids.device
+    
+        # ===== 1. Content Selector =====
+        cs_input = input_ids.clone()
+        cs_input[cs_input >= self.vocab.vocab_size] = self.vocab.unk_idx
+    
+        probs = self.content_selector(cs_input, lengths, return_logits=False)
+        valid_mask = (input_ids != self.vocab.pad_idx).float()
+    
+        hard_mask = (probs > self.threshold).float()
+        selector_mask = (hard_mask + (1 - hard_mask) * self.soft_coeff) * valid_mask
+    
+        self.last_selection_rate = (
+            (hard_mask * valid_mask).sum() / valid_mask.sum()
+        ).item()
+    
+        # ===== 2. Encode =====
+        encoder_outputs, decoder_hidden = model.encode(input_ids, lengths)
+    
+        # ===== 3. Decoder kwargs =====
+        kwargs = {
+            "encoder_outputs": encoder_outputs,
+            "encoder_masks": (input_ids != self.vocab.pad_idx),
+            "context": torch.zeros((B, 1, model.context_size), device=device),
+            "extra_zeros": extra_zeros,
+            "extended_source_idx": ext_idx,
+            "selector_mask": selector_mask,
+        }
+    
+        if model.is_coverage:
+            kwargs["coverages"] = torch.zeros((B, 1, src_len), device=device)
+    
+        # ===== 4. Greedy Decode =====
+        ys = torch.full((B, 1),
+                        self.vocab.bos_idx,
+                        device=device,
+                        dtype=torch.long)
+    
+        outputs = []
+    
+        for t in range(max_len):
+            inp = ys[:, -1:].clone()
+            inp[inp >= self.vocab.vocab_size] = self.vocab.unk_idx
+            inp = model.target_token_embedder(inp)
+    
+            final_dist, decoder_hidden, kwargs = model.decoder(
+                inp, decoder_hidden, kwargs=kwargs
+            )
+    
+            # final_dist: [B, 1, V_ext] → [B, V_ext]
+            final_dist = final_dist.squeeze(1)
+    
+            # ===== NO-REPEAT 2-GRAM =====
+            if t >= 2:
+                for b in range(B):
+                    last_2 = ys[b, -2:].tolist()
+                    for i in range(len(ys[b]) - 2):
+                        if ys[b, i:i+2].tolist() == last_2:
+                            forbidden = ys[b, i+2].item()
+                            if forbidden < final_dist.size(1):
+                                final_dist[b, forbidden] = -1e10
+    
+            next_tok = final_dist.argmax(-1).unsqueeze(1) 
+
+            outputs.append(next_tok)
+            ys = torch.cat([ys, next_tok], dim=1)
+
+    
+            if (next_tok == self.vocab.eos_idx).all():
+                break
+    
+        return torch.cat(outputs, dim=1)
+
+
+
     # =========================
-    # Bottom-Up Mask + Coverage
-    # =========================
-    def apply_bottom_up_mask(self, model, input_ids, lengths, ext_idx, extra_zeros):
-        with torch.no_grad():
-            # ---- Content Selector
-            cs_input = input_ids.clone()
-            cs_input[cs_input >= self.vocab.vocab_size] = self.vocab.unk_idx
-
-            probs = self.content_selector(cs_input, lengths, return_logits=False)
-
-            valid_mask = (input_ids != self.vocab.pad_idx).float()
-
-            hard_mask = (probs > self.threshold).float()
-            mask = hard_mask + (1.0 - hard_mask) * self.soft_coeff
-            mask = mask * valid_mask
-
-            self.last_selection_rate = (
-                hard_mask * valid_mask
-            ).sum().item() / valid_mask.sum().item()
-
-            original_forward = model.decoder.forward
-            coverage = None
-
-            def masked_forward(emb, hidden, kwargs=None):
-                nonlocal coverage
-
-                v_dist, h, kw = original_forward(emb, hidden, kwargs)
-
-                if "attn_dists" in kw:
-                    attn = kw["attn_dists"]  # [B, 1, T]
-
-                    # ---- Bottom-up mask
-                    attn = attn * mask.unsqueeze(1)
-                    attn = attn / (attn.sum(dim=2, keepdim=True) + 1e-9)
-
-                    # ---- Coverage
-                    if coverage is None:
-                        coverage = attn
-                    else:
-                        coverage = coverage + attn
-
-                    if self.coverage_beta > 0:
-                        cov_pen = torch.min(attn, coverage).sum(dim=2)
-                        attn = attn * torch.exp(
-                            -self.coverage_beta * cov_pen
-                        ).unsqueeze(2)
-                        attn = attn / (attn.sum(dim=2, keepdim=True) + 1e-9)
-
-                    kw["attn_dists"] = attn
-
-                    if hasattr(model, "calculate_final_dist"):
-                        v_dist = model.calculate_final_dist(
-                            ext_idx, v_dist, attn, kw.get("p_gens"), extra_zeros
-                        )
-
-                return v_dist, h, kw
-
-            try:
-                model.decoder.forward = masked_forward
-                preds = model.predict(input_ids, ext_idx, extra_zeros)
-            finally:
-                model.decoder.forward = original_forward
-
-            return preds
-
-    # =========================
-    # Decode
+    # Decode indices → text
     # =========================
     def decode(self, indices, oov_list):
         results = []
@@ -219,12 +222,13 @@ class BottomUpSummarizer:
             extra_zeros = items.extra_zeros.to(self.device)
             lengths = (input_ids != self.vocab.pad_idx).sum(dim=1)
 
-            pred_ids = self.apply_bottom_up_mask(
+            pred_ids = self.greedy_decode(
                 self.pointer_generator,
                 input_ids,
                 lengths,
                 ext_idx,
-                extra_zeros
+                extra_zeros,
+                max_len=200
             )
 
             pred_texts = self.decode(pred_ids, items.oov_list)
