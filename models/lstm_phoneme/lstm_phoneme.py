@@ -150,7 +150,7 @@ class LSTM_Model_Phoneme(nn.Module):
         outputs = []
         
         # --- 2. VÒNG LẶP SINH TỪ ---
-        for _ in range(self.MAX_LENGTH):
+        for i in range(self.MAX_LENGTH):
             # Chạy 1 bước decoder
             # decoder_output shape: (B, 1, 4, vocab_size)
             decoder_output, (decoder_hidden, decoder_memory) = self.decoder.forward_step(decoder_input, (decoder_hidden, decoder_memory))
@@ -166,11 +166,11 @@ class LSTM_Model_Phoneme(nn.Module):
             if batch_size == 1:
                 # Kiểm tra xem âm đầu (index 0) có phải là EOS không
                 token_onset = decoder_input[0, 0, 0].item()
-                if token_onset == self.vocab.eos_idx:
+                if token_onset == self.vocab.eos_idx and i >= 1:
                     break
 
             # Nối các bước lại: (B, Sequence_Length, 4)
             final_output = torch.cat(outputs, dim=1)
             
-            return final_output
+        return final_output
     
