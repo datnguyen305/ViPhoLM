@@ -72,57 +72,42 @@ class TextSumTaskPhoneme(BaseTask):
                 # Backward
                 self.optim.zero_grad()
                 loss.backward()
-                
-                # Clip gradient để tránh lỗi nổ gradient với model phức tạp
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                
                 self.optim.step()
-                
-                # Logging
-                current_loss = loss.item()
-                running_loss += current_loss
-                train_losses.append(current_loss)
+                running_loss += loss.item()
+                train_losses.append(loss.item())
 
                 pbar.set_postfix(loss=running_loss / (it + 1))
                 pbar.update()
                 self.scheduler.step()
-                
         return train_losses
 
     def evaluate_metrics(self, dataloader: DataLoader) -> dict:
         self.model.eval()
         gens = {}
         gts = {}
-        
-        # Biến debug
-        debug_count = 0
-
-        with torch.inference_mode():
-            with tqdm(desc='Epoch %d - Evaluating' % (self.epoch+1), unit='it', total=len(dataloader)) as pbar:
-                for items in dataloader:
-                    items = items.to(self.device)
-                    input_ids = items.input_ids
-                    
+        with tqdm(desc='Epoch %d - Evaluating' % (self.epoch+1), unit='it', total=len(dataloader)) as pbar:
+            for items in dataloader:
+                items = items.to(self.device)
+                input_ids = items.input_ids
+                label = items.label
+                with torch.no_grad():
                     # Predict: [Batch, Seq, 4]
                     prediction = self.model.predict(input_ids)
-
-                    # --- QUAN TRỌNG: SỬA DECODE ---
-                    # Dùng decode_batch_caption của ViWordVocab để xử lý output 4 thành phần
-                    decoded_preds = self.vocab.decode_batch_caption(prediction, join_words=True)
-                    decoded_labels = self.vocab.decode_batch_caption(items.label, join_words=True)
+                    prediction = self.vocab.decode_batch_caption(prediction, join_words=True)
+                    label = self.vocab.decode_batch_caption(items.label, join_words=True)
 
                     # Debug: In thử 1 câu ra xem model chạy thế nào
                     if debug_count < 1:
-                        print(f"\n[DEBUG Sample] GT: {decoded_labels[0]}")
-                        print(f"[DEBUG Sample] PR: {decoded_preds[0]}")
+                        print(f"\n[DEBUG Sample] GT: {label[0]}")
+                        print(f"[DEBUG Sample] PR: {prediction[0]}")
                         debug_count += 1
 
                     # Lưu kết quả
-                    uid = items.id[0]
-                    gens[uid] = decoded_preds[0]
-                    gts[uid] = decoded_labels[0]
+                    id = items.id[0]
+                    gens[id] = prediction[0]
+                    gts[id] = label[0]
 
-                    pbar.update()
+                pbar.update()
         
         # Calculate metrics (ROUGE, BLEU, etc.)
         self.logger.info("Getting scores")
