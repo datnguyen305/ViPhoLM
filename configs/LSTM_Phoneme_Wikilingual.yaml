@@ -1,5 +1,5 @@
 vocab:
-  type: Vocab
+  type: ViWordVocab
   path:
     train: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
     dev: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
