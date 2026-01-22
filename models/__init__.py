@@ -17,4 +17,4 @@ from .longformer.longformer_encoder_decoder import LongformerEncoderDecoderModel
 # from .bottom_up.model import BottomUpSummarizer
 from .transformer_phoneme.transfomer_phoneme import Transformer_Phoneme_Model
 from .bottom_up.content_selector import ContentSelector
-from .transformer_phoneme.transfomer_phoneme import Transformer_Phoneme_Model
+from .lstm_phoneme.lstm_phoneme import LSTM_Model_Phoneme
