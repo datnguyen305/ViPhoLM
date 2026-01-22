@@ -97,10 +97,10 @@ class TextSumTaskPhoneme(BaseTask):
                     label = self.vocab.decode_batch_caption(items.label, join_words=True)
 
                     # Debug: In thử 1 câu ra xem model chạy thế nào
-                    if debug_count < 1:
-                        print(f"\n[DEBUG Sample] GT: {label[0]}")
-                        print(f"[DEBUG Sample] PR: {prediction[0]}")
-                        debug_count += 1
+                    
+                    print(f"\n[DEBUG Sample] GT: {label[0]}")
+                    print(f"[DEBUG Sample] PR: {prediction[0]}")
+                    debug_count += 1
 
                     # Lưu kết quả
                     id = items.id[0]
