@@ -5,164 +5,238 @@ from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
 
 
-class Encoder(nn.Module):
-    def __init__(self, config, vocab):
-        super(Encoder, self).__init__()
 
-        # Embedding layer
-        self.embedding = nn.Embedding(vocab.vocab_size, config.hidden_size, padding_idx=vocab.pad_idx)
-        
-        # BiGRU layer - Encoder có thể dùng bidirectional
-        self.bigru = nn.GRU(
+class LuongAttention(nn.Module):
+    """
+    score(h_t, h_s) = h_t^T W h_s
+    """
+    def __init__(self, hidden_size: int):
+        super().__init__()
+        self.linear = nn.Linear(hidden_size, hidden_size, bias=False)
+
+    def forward(
+        self,
+        decoder_hidden: torch.Tensor,   # [B, H]
+        encoder_outputs: torch.Tensor,  # [B, L, H]
+        mask: torch.Tensor | None = None
+    ):
+        # [B, 1, H]
+        query = self.linear(decoder_hidden).unsqueeze(1)
+
+        # energy: [B, 1, L]
+        energy = torch.bmm(query, encoder_outputs.transpose(1, 2))
+
+        if mask is not None:
+            energy = energy.masked_fill(mask.unsqueeze(1) == 0, -1e9)
+
+        # attention weights: [B, 1, L]
+        attn_weights = torch.softmax(energy, dim=-1)
+
+        # context vector: [B, 1, H]
+        context = torch.bmm(attn_weights, encoder_outputs)
+
+        return context, attn_weights
+
+
+class Encoder(nn.Module):
+    def __init__(self, config, vocab: Vocab):
+        super().__init__()
+
+        self.embedding = nn.Embedding(
+            vocab.vocab_size,
             config.hidden_size,
-            config.hidden_size,
-            num_layers=config.layer_dim, 
-            bidirectional=config.bidirectional,
-            batch_first=True, 
-            dropout=config.dropout if config.layer_dim > 1 else 0  # GRU chỉ apply dropout khi > 1 layer
+            padding_idx=vocab.pad_idx
         )
-        
+
+        self.bigru = nn.GRU(
+            input_size=config.hidden_size,
+            hidden_size=config.hidden_size,
+            num_layers=config.layer_dim,
+            bidirectional=config.bidirectional,
+            batch_first=True,
+            dropout=config.dropout if config.layer_dim > 1 else 0.0
+        )
+
         self.dropout = nn.Dropout(config.dropout)
         self.hidden_size = config.hidden_size
         self.bidirectional = config.bidirectional
 
-    def forward(self, input):
-        embedded = self.dropout(self.embedding(input))  # [batch_size, seq_len, hidden_size]
-        
-        output, hidden = self.bigru(embedded)  # output: [B, L, H*2], hidden: [num_layers*2, B, H]
-        
-        # Combine bidirectional hidden states
         if self.bidirectional:
-            hidden = self._combine_bidirectional_hidden(hidden)  # [num_layers, B, H]
-        
-        return output, hidden
-    
-    def _combine_bidirectional_hidden(self, hidden):
+            # project 2H -> H
+            self.output_proj = nn.Linear(
+                config.hidden_size * 2,
+                config.hidden_size
+            )
+
+    def forward(self, x: torch.Tensor):
         """
-        Combine forward and backward hidden states
-        Input: [num_layers * 2, batch_size, hidden_size]
-        Output: [num_layers, batch_size, hidden_size]
+        x: [B, L]
         """
-        num_layers = hidden.size(0) // 2  
-        # Reshape: [num_layers, 2, batch_size, hidden_size]
+        emb = self.dropout(self.embedding(x))
+        outputs, hidden = self.bigru(emb)
+
+        if self.bidirectional:
+            # outputs: [B, L, 2H] -> [B, L, H]
+            outputs = self.output_proj(outputs)
+
+            # hidden: [2*num_layers, B, H] -> [num_layers, B, H]
+            hidden = self._combine_bidirectional_hidden(hidden)
+
+        return outputs, hidden
+
+    @staticmethod
+    def _combine_bidirectional_hidden(hidden: torch.Tensor):
+        """
+        hidden: [num_layers*2, B, H]
+        return: [num_layers, B, H]
+        """
+        num_layers = hidden.size(0) // 2
         hidden = hidden.view(num_layers, 2, hidden.size(1), hidden.size(2))
-        # Sum forward and backward: [num_layers, batch_size, hidden_size]
-        combined_hidden = hidden.sum(dim=1)
-        return combined_hidden
+        return hidden.sum(dim=1)
 
 
-class Decoder(nn.Module):
-    def __init__(self, config, vocab):
-        super(Decoder, self).__init__()
+class AttnDecoder(nn.Module):
+    def __init__(self, config, vocab: Vocab):
+        super().__init__()
 
         self.vocab = vocab
-        
-        # Embedding layer
-        self.embedding = nn.Embedding(vocab.vocab_size, config.hidden_size, padding_idx=vocab.pad_idx)
-        
-        self.gru = nn.GRU(
+        self.hidden_size = config.hidden_size
+
+        self.embedding = nn.Embedding(
+            vocab.vocab_size,
             config.hidden_size,
-            config.hidden_size, 
-            num_layers=config.layer_dim, 
-            bidirectional=False,  
-            batch_first=True, 
-            dropout=config.dropout if config.layer_dim > 1 else 0
+            padding_idx=vocab.pad_idx
         )
-        
+
+        self.attention = LuongAttention(config.hidden_size)
+
+        self.gru = nn.GRU(
+            input_size=config.hidden_size * 2,  # embedding + context
+            hidden_size=config.hidden_size,
+            num_layers=config.layer_dim,
+            batch_first=True,
+            dropout=config.dropout if config.layer_dim > 1 else 0.0
+        )
+
         self.dropout = nn.Dropout(config.dropout)
-        
-        self.out = nn.Linear(config.hidden_size, vocab.vocab_size)
 
-    def forward(self, encoder_outputs: torch.Tensor, encoder_hidden: torch.Tensor, target_tensor: torch.Tensor):
-        batch_size = encoder_outputs.size(0)
-        decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=encoder_outputs.device).fill_(self.vocab.bos_idx)
-        
-        decoder_hidden = encoder_hidden
+        self.out = nn.Linear(
+            config.hidden_size * 2,
+            vocab.vocab_size
+        )
 
-        decoder_outputs = []
-        target_len = target_tensor.shape[1]
-        
-        for i in range(target_len):
-            decoder_output, decoder_hidden = self.forward_step(decoder_input, decoder_hidden)
-            decoder_outputs.append(decoder_output)
-            
-            # Teacher forcing: dùng target thật
-            decoder_input = target_tensor[:, i].unsqueeze(1)
-
-        decoder_outputs = torch.cat(decoder_outputs, dim=1)
-        decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
-        
-        return decoder_outputs, decoder_hidden, None
-
-    def forward_step(self, input, hidden):
+    def forward(
+        self,
+        encoder_outputs: torch.Tensor,
+        encoder_hidden: torch.Tensor,
+        targets: torch.Tensor
+    ):
         """
-        Single decoding step
+        targets: [B, T]
         """
-        output = self.embedding(input)  # [batch_size, 1, hidden_size]
-        output = self.dropout(output)
-        
-        output, hidden = self.gru(output, hidden)  # [batch_size, 1, hidden_size]
+        batch_size, tgt_len = targets.size()
+        device = encoder_outputs.device
 
-        output = self.out(output)  # [batch_size, 1, vocab_size]
-        
-        return output, hidden
+        decoder_input = torch.full(
+            (batch_size, 1),
+            self.vocab.bos_idx,
+            device=device,
+            dtype=torch.long
+        )
+
+        hidden = encoder_hidden
+        outputs = []
+
+        for t in range(tgt_len):
+            output, hidden = self.forward_step(
+                decoder_input,
+                hidden,
+                encoder_outputs
+            )
+            outputs.append(output)
+            decoder_input = targets[:, t].unsqueeze(1)
+
+        outputs = torch.cat(outputs, dim=1)
+        return outputs, hidden
+
+    def forward_step(
+        self,
+        input: torch.Tensor,
+        hidden: torch.Tensor,
+        encoder_outputs: torch.Tensor
+    ):
+        # embedding
+        emb = self.dropout(self.embedding(input))  # [B,1,H]
+
+        # attention
+        context, _ = self.attention(hidden[-1], encoder_outputs)  # [B,1,H]
+
+        # GRU
+        gru_input = torch.cat([emb, context], dim=-1)
+        output, hidden = self.gru(gru_input, hidden)
+
+        # output projection
+        output = torch.cat([output, context], dim=-1)
+        logits = self.out(output)  # [B,1,V]
+
+        return logits, hidden
 
 
 @META_ARCHITECTURE.register()
 class BiGRU_Model(nn.Module):
     def __init__(self, config, vocab: Vocab):
-        super(BiGRU_Model, self).__init__()
-
-        self.vocab = vocab
-        self.MAX_LENGTH = vocab.max_sentence_length + 2  # +2 for bos and eos tokens
+        super().__init__()
         self.d_model = config.d_model
+        self.vocab = vocab
+        self.MAX_LENGTH = vocab.max_sentence_length + 2
 
         self.encoder = Encoder(config.encoder, vocab)
-        self.decoder = Decoder(config.decoder, vocab)
+        self.decoder = AttnDecoder(config.decoder, vocab)
 
-        label_smoothing = getattr(config, 'label_smoothing', 0.0)
         self.loss_fn = nn.CrossEntropyLoss(
-            ignore_index=self.vocab.pad_idx,
-            label_smoothing=label_smoothing
+            ignore_index=vocab.pad_idx,
+            label_smoothing=getattr(config, "label_smoothing", 0.0)
         )
 
     def forward(self, x: torch.Tensor, labels: torch.Tensor):
-        encoder_outputs, encoder_hidden = self.encoder(x)
-        decoder_outputs, _, _ = self.decoder(encoder_outputs, encoder_hidden, labels)
-        
-        # Compute loss
+        enc_out, enc_hidden = self.encoder(x)
+        dec_out, _ = self.decoder(enc_out, enc_hidden, labels)
+
         loss = self.loss_fn(
-            decoder_outputs.reshape(-1, self.vocab.vocab_size), 
+            dec_out.reshape(-1, self.vocab.vocab_size),
             labels.reshape(-1)
         )
-        return decoder_outputs, loss
 
-    def predict(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Inference without teacher forcing
-        """
-        # Encode input
-        encoder_outputs, encoder_hidden = self.encoder(x)
-        batch_size = encoder_outputs.size(0)
-        decoder_hidden = encoder_hidden
-        
-        # Start with <bos> token
-        decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=encoder_outputs.device).fill_(self.vocab.bos_idx)
+        return dec_out, loss
 
+    @torch.no_grad()
+    def predict(self, x: torch.Tensor):
+        enc_out, enc_hidden = self.encoder(x)
+
+        batch_size = x.size(0)
+        device = x.device
+
+        decoder_input = torch.full(
+            (batch_size, 1),
+            self.vocab.bos_idx,
+            device=device,
+            dtype=torch.long
+        )
+
+        hidden = enc_hidden
         outputs = []
 
         for _ in range(self.MAX_LENGTH):
-            # Predict one step
-            decoder_output, decoder_hidden = self.decoder.forward_step(decoder_input, decoder_hidden)
+            logits, hidden = self.decoder.forward_step(
+                decoder_input,
+                hidden,
+                enc_out
+            )
 
-            # Get token with highest probability
-            decoder_input = decoder_output.argmax(dim=-1)  # [batch, 1]
+            decoder_input = logits.argmax(dim=-1)
             outputs.append(decoder_input)
 
-            # Early stopping if all sequences generated <eos>
             if (decoder_input == self.vocab.eos_idx).all():
                 break
 
-        # Concatenate all outputs: [batch, seq_len]
-        outputs = torch.cat(outputs, dim=1)
-        return outputs
+        return torch.cat(outputs, dim=1)

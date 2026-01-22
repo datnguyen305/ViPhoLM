@@ -22,29 +22,37 @@ dataset:
     path: datasets/Vietnews-dataset/test.json
   batch_size: 32
   num_workers: 16
+  max_source_length: 512
+  max_target_length: 128
 
 model:
   name: BiGRU_Model3layer_Vietnews
   architecture: BiGRU_Model
   d_model: 512
   encoder:
-    layer_dim: 3
-    input_dim: 512
-    hidden_size: 512
-    bidirectional: True
-    dropout: 0.1
+    hidden_size: 256          # GRU hidden dimension
+    layer_dim: 2              # number of GRU layers
+    bidirectional: true       # BiGRU
+    dropout: 0.2
+
   decoder:
-    layer_dim: 3
-    input_dim: 512
-    hidden_size: 512
-    bidirectional: False
-    dropout: 0.1
-  label_smoothing: 0.1
+    hidden_size: 256          # must match encoder hidden_size
+    layer_dim: 2
+    dropout: 0.2
   device: cuda
 
+inference:
+  max_length: 130
+  beam_size: 1     
+
 training:
+  learning_rate: 0.15
+  weight_decay: 0.00001
+  optimizer: adam
+  scheduler: none
+  gradient_clip: 1.0
+  label_smoothing: 0.1
   checkpoint_path: "checkpoints"
-  learning_rate: 0.0001
   warmup: 1000
   patience: 5
   score: rouge-L
