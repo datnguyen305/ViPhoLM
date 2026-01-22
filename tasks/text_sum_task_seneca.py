@@ -6,7 +6,7 @@ import json
 
 from builders.task_builder import META_TASK
 from builders.dataset_builder import build_dataset
-from tasks.base_task import BaseTask
+from tasks.base_task_seneca import BaseTask
 from data_utils import collate_fn_seneca
 import evaluation
 
