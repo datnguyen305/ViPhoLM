@@ -1,13 +1,13 @@
 vocab:
   type: Vocab
   path:
-    train: datasets/Wikilingual-dataset/train.json
-    dev: datasets/Wikilingual-dataset/dev.json
-    test: datasets/Wikilingual-dataset/test.json
-  TRAIN: datasets/Wikilingual-dataset/train.json
-  DEV: datasets/Wikilingual-dataset/dev.json
-  TEST: datasets/Wikilingual-dataset/test.json
-  JSON_PATH: datasets/Wikilingual-dataset/train.json
+    train: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+    dev: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
+    test: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
+  TRAIN: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+  DEV: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
+  TEST: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
+  JSON_PATH: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
   TOKENIZER: null
   min_freq: 3
   bos_token: <bos>
@@ -18,13 +18,13 @@ vocab:
 dataset:
   train: 
     type: TextSumDatasetPhoneme
-    path: datasets/Wikilingual-dataset/train.json
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
   dev:
     type: TextSumDatasetPhoneme
-    path: datasets/Wikilingual-dataset/dev.json
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
   test: 
     type: TextSumDatasetPhoneme
-    path: datasets/Wikilingual-dataset/test.json
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
   batch_size: 32
   num_workers: 16
 
