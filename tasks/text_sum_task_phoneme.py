@@ -100,7 +100,6 @@ class TextSumTaskPhoneme(BaseTask):
                     
                     print(f"\n[DEBUG Sample] GT: {label[0]}")
                     print(f"[DEBUG Sample] PR: {prediction[0]}")
-                    debug_count += 1
 
                     # Lưu kết quả
                     id = items.id[0]
