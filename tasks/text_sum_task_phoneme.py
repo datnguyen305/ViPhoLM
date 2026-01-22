@@ -96,11 +96,6 @@ class TextSumTaskPhoneme(BaseTask):
                     prediction = self.vocab.decode_batch_caption(prediction, join_words=True)
                     label = self.vocab.decode_batch_caption(items.label, join_words=True)
 
-                    # Debug: In thử 1 câu ra xem model chạy thế nào
-                    
-                    print(f"\n[DEBUG Sample] GT: {label[0]}")
-                    print(f"[DEBUG Sample] PR: {prediction[0]}")
-
                     # Lưu kết quả
                     id = items.id[0]
                     gens[id] = prediction[0]
