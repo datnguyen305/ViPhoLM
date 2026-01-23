@@ -29,12 +29,11 @@ class Encoder(nn.Module):
         self.li_cn = nn.Linear(config.hidden_size * 2, config.hidden_size) 
 
     def reshape_encoder_states(self, hidden, cell):
-        if self.config.encoder.bidirectional:
-            hidden = hidden.reshape(self.config.encoder.layer_dim, 2, hidden.shape[1], hidden.shape[2])
-            cell = cell.reshape(self.config.encoder.layer_dim, 2, cell.shape[1], cell.shape[2])
-            hidden = torch.cat((hidden[:, 0, :, :], hidden[:, 1, :, :]), dim=2)
-            cell = torch.cat((cell[:, 0, :, :], cell[:, 1, :, :]), dim=2)
-            # hidden, cell: (num_layers, batch_size, hidden_size * 2)
+        hidden = hidden.reshape(self.config.encoder.layer_dim, 2, hidden.shape[1], hidden.shape[2])
+        cell = cell.reshape(self.config.encoder.layer_dim, 2, cell.shape[1], cell.shape[2])
+        hidden = torch.cat((hidden[:, 0, :, :], hidden[:, 1, :, :]), dim=2)
+        cell = torch.cat((cell[:, 0, :, :], cell[:, 1, :, :]), dim=2)
+        # hidden, cell: (num_layers, batch_size, hidden_size * 2)
         return hidden, cell
 
     def forward(self, input):
