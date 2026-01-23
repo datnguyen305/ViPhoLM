@@ -25,7 +25,7 @@ dataset:
   test: 
     type: TextSumDatasetPhoneme
     path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
-  batch_size: 16
+  batch_size: 4
   num_workers: 4
 
 model:
