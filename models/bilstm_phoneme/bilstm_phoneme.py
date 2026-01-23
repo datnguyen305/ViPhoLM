@@ -10,6 +10,7 @@ class Encoder(nn.Module):
     def __init__(self, config, vocab: ViWordVocab):
         super().__init__()
         self.num_features = 4
+        self.num_layer = config.layer_dim
         self.embedding = nn.ModuleList([
             nn.Embedding(vocab.vocab_size, config.hidden_size) 
             for _ in range(self.num_features)
@@ -29,8 +30,8 @@ class Encoder(nn.Module):
         self.li_cn = nn.Linear(config.hidden_size * 2, config.hidden_size) 
 
     def reshape_encoder_states(self, hidden, cell):
-        hidden = hidden.reshape(self.config.encoder.layer_dim, 2, hidden.shape[1], hidden.shape[2])
-        cell = cell.reshape(self.config.encoder.layer_dim, 2, cell.shape[1], cell.shape[2])
+        hidden = hidden.reshape(self.num_layer, 2, hidden.shape[1], hidden.shape[2])
+        cell = cell.reshape(self.num_layer, 2, cell.shape[1], cell.shape[2])
         hidden = torch.cat((hidden[:, 0, :, :], hidden[:, 1, :, :]), dim=2)
         cell = torch.cat((cell[:, 0, :, :], cell[:, 1, :, :]), dim=2)
         # hidden, cell: (num_layers, batch_size, hidden_size * 2)
