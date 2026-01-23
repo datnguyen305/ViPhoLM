@@ -1,0 +1,46 @@
+
+vocab:
+  type: Vocab
+  path:
+    train: datasets/Vietnews-dataset/train.json
+    dev: datasets/Vietnews-dataset/dev.json
+    test: datasets/Vietnews-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/train.json
+  dev:
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/test.json
+  batch_size: 32
+  num_workers: 8
+  max_src_len: 400
+  max_tgt_len: 120
+
+model:
+  name: BiSum_VietNews
+  architecture: BiSumModel
+  device: cuda
+  d_model: 512
+  emb_dim: 256
+  lambda_mix: 0.7
+  max_len: 512
+
+training:
+  learning_rate: 0.15
+  warmup: 4000
+  patience: 5
+  score: rouge-L
+  checkpoint_path: checkpoints
+  epochs: 20
+
+task: TextSumTask
