@@ -42,7 +42,6 @@ model:
   device: cuda
 
 inference:
-  max_length: 130
   beam_size: 1     
 
 training:
