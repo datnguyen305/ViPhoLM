@@ -22,8 +22,6 @@ dataset:
     path: datasets/Vietnews-dataset/test.json
   batch_size: 32
   num_workers: 16
-  max_source_length: 512
-  max_target_length: 128
 
 model:
   name: BiGRU_Model3layer_Vietnews
