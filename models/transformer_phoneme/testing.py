@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
+import math
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, config):
@@ -166,12 +167,35 @@ def create_causal_mask(seq, device):
     # 3. Đưa về dạng (1, 1, S, S) để tương thích với scores (B, H, S, S)
     return mask.unsqueeze(0).unsqueeze(0).bool()
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super().__init__()
+        
+        # Create positional encoding matrix
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        
+        # Register as buffer (not a parameter, but part of state)
+        self.register_buffer('pe', pe)
+    
+    def forward(self, x):
+        # x shape: [B, L, D]
+        seq_len = x.size(1)
+        return x + self.pe[:seq_len, :].unsqueeze(0)
+    
 @META_ARCHITECTURE.register()
 class Testing(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super().__init__()
+        self.input_embedding = nn.Embedding(vocab.vocab_size, config.hidden_size, padding_idx=vocab.pad_idx)
+        self.output_embedding = nn.Embedding(vocab.vocab_size, config.hidden_size, padding_idx=vocab.pad_idx)
         self.encoder = TransformerEncoderBlock(config.encoder, vocab)
         self.decoder = TransformerDecoderBlock(config.decoder, vocab)
+        self.PE = PositionalEncoding(config.hidden_size, max_len=5000)
         
         self.vocab = vocab
         self.MAX_LENGTH = vocab.max_sentence_length + 2 # +2 for BOS and EOS tokens
@@ -181,25 +205,36 @@ class Testing(nn.Module):
         self.fc_out = nn.Linear(config.hidden_size, vocab.vocab_size)
 
     def forward(self, src, trg):
-        src_mask = create_padding_mask(src, self.vocab.pad_idx)
-        trg_mask = create_padding_mask(trg, self.vocab.pad_idx)
-        trg_causal_mask = create_causal_mask(trg.size(1), device=trg.device)
+        # Cắt chuỗi cho training
+        trg_input = trg[:, :-1]
+        trg_label = trg[:, 1:]
 
-        encoder_outs = self.encoder(src, src_mask=src_mask, src_causal_mask=None)
-    
-        outs = self.decoder(trg, encoder_outs, trg_mask=trg_mask, trg_causal_mask=trg_causal_mask, src_mask=src_mask)
-        # outs: (B, S, d_model)
-        logits = self.fc_out(outs) # (B, S, vocab_size)
-        V = self.vocab.vocab_size
-        loss = self.loss(logits.view(-1, V), trg.view(-1))
+        # Embedding + Positional Encoding
+        src_emb = self.PE(self.input_embedding(src))
+        trg_emb = self.PE(self.output_embedding(trg_input))
+
+        # Masking
+        src_mask = create_padding_mask(src, self.vocab.pad_idx)
+        trg_mask = create_padding_mask(trg_input, self.vocab.pad_idx)
+        trg_causal_mask = create_causal_mask(trg_input.size(1), device=trg.device)
+
+        # Encoder - Decoder
+        encoder_outs = self.encoder(src_emb, src_mask=src_mask)
+        outs = self.decoder(trg_emb, encoder_outs, trg_mask=trg_mask, 
+                            trg_causal_mask=trg_causal_mask, src_mask=src_mask)
+        
+        logits = self.fc_out(outs)
+        loss = self.loss(logits.reshape(-1, self.vocab.vocab_size), trg_label.reshape(-1))
+        
         return logits, loss
     
     
     def predict(self, src):
         # 1. Chuẩn bị đầu vào cho Encoder
         # src: (1, S_src) - Giả sử bạn truyền vào 1 câu đơn lẻ
+        src_emb = self.PE(self.input_embedding(src))
         src_mask = create_padding_mask(src, self.vocab.pad_idx).to(src.device)
-        encoder_outs = self.encoder(src, src_mask=src_mask, src_causal_mask=None)
+        encoder_outs = self.encoder(src_emb, src_mask=src_mask, src_causal_mask=None)
 
 
         # 2. Khởi tạo chuỗi đích với token bắt đầu <bos>
@@ -207,12 +242,13 @@ class Testing(nn.Module):
         trg_indexes = [self.vocab.bos_idx]
         for _ in range(self.MAX_LENGTH):
             trg_tensor = torch.LongTensor(trg_indexes).unsqueeze(0).to(src.device)  # (1, len)
+            trg_emb = self.output_embedding(trg_tensor)
 
             trg_mask = create_padding_mask(trg_tensor, self.vocab.pad_idx).to(src.device)
             trg_causal_mask = create_causal_mask(trg_tensor.size(1), device=src.device)
 
             # 3. Dự đoán token tiếp theo
-            outs = self.decoder(trg_tensor, encoder_outs, trg_mask=trg_mask, trg_causal_mask=trg_causal_mask, src_mask=src_mask)
+            outs = self.decoder(trg_emb, encoder_outs, trg_mask=trg_mask, trg_causal_mask=trg_causal_mask, src_mask=src_mask)
             logits = self.fc_out(outs)  # (1, len, vocab_size)
 
             next_token = logits[:, -1, :].argmax(dim=-1).item()

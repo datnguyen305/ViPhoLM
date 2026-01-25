@@ -30,11 +30,13 @@ model:
   n_layers: 6
   n_head: 8
   d_model: 512
+  dim_feedforward: 2048
   ffn_hidden: 2048
   drop_prob: 0.1
   encoder:
     hidden_size: 512
     n_head: 8
+    dim_feedforward: 2048
     ffn_hidden: 2048
     drop_prob: 0.1
     n_layers: 6
@@ -42,6 +44,7 @@ model:
   decoder:
     hidden_size: 512
     n_head: 8
+    dim_feedforward: 2048
     ffn_hidden: 2048
     drop_prob: 0.1
     n_layers: 6
