@@ -120,10 +120,10 @@ class TransformerDecoderLayer(nn.Module):
         self.dropout1 = nn.Dropout(config.drop_prob)
         self.dropout2 = nn.Dropout(config.drop_prob)
 
-    def forward(self, src, memory, src_mask=None, src_causal_mask=None):
+    def forward(self, src, memory, trg_mask=None, trg_causal_mask=None, src_mask=None):
         # 1. Masked Multi-Head Attention
         attn_input = self.norm1(src)
-        attn_output = self.dropout1(self.multi_head_attn(attn_input, attn_input, attn_input, mask=src_mask, causal_mask=src_causal_mask))
+        attn_output = self.dropout1(self.multi_head_attn(attn_input, attn_input, attn_input, mask=trg_mask, causal_mask=trg_causal_mask))
         attn_input_2 = src + attn_output
 
         # 2. Multi-Head Attention
