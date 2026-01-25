@@ -232,31 +232,49 @@ class Testing(nn.Module):
     
     
     def predict(self, src):
-        # 1. Chuẩn bị đầu vào cho Encoder
-        # src: (1, S_src) - Giả sử bạn truyền vào 1 câu đơn lẻ
+        device = src.device
+        batch_size = src.size(0)
+        
+        # 1. Encoder (Chạy 1 lần duy nhất)
         src_emb = self.PE(self.input_embedding(src))
-        src_mask = create_padding_mask(src, self.vocab.pad_idx).to(src.device)
-        encoder_outs = self.encoder(src_emb, src_mask=src_mask, src_causal_mask=None)
-
+        src_mask = create_padding_mask(src, self.vocab.pad_idx).to(device)
+        encoder_outs = self.encoder(src_emb, src_mask=src_mask)
+        decoder_input = torch.full((batch_size, 1), self.vocab.bos_idx, dtype=torch.long, device=device)
 
         # 2. Khởi tạo chuỗi đích với token bắt đầu <bos>
         # trg_indexes: (1, 1)
-        trg_indexes = [self.vocab.bos_idx]
+        outputs = []
         for _ in range(self.MAX_LENGTH):
-            trg_tensor = torch.LongTensor(trg_indexes).unsqueeze(0).to(src.device)  # (1, len)
-            trg_emb = self.output_embedding(trg_tensor)
+            # Cần cộng PE cho input của decoder mỗi bước
+            trg_emb = self.PE(self.output_embedding(decoder_input))
+            
+            # Tạo mask cho chuỗi hiện tại
+            trg_mask = create_padding_mask(decoder_input, self.vocab.pad_idx)
+            trg_causal_mask = create_causal_mask(decoder_input.size(1), device=device)
 
-            trg_mask = create_padding_mask(trg_tensor, self.vocab.pad_idx).to(src.device)
-            trg_causal_mask = create_causal_mask(trg_tensor.size(1), device=src.device)
+            # 3. Forward qua Decoder
+            outs = self.decoder(trg_emb, encoder_outs, 
+                                trg_mask=trg_mask, 
+                                trg_causal_mask=trg_causal_mask, 
+                                src_mask=src_mask)
+            
+            # Lấy logit của token cuối cùng: (Batch, 1, Vocab_size)
+            logits = self.fc_out(outs[:, -1:, :])
+            
+            # Dự đoán token tiếp theo: (Batch, 1)
+            next_token = logits.argmax(dim=-1)
+            
+            outputs.append(next_token)
+            
+            # Cập nhật decoder_input để dự đoán bước tiếp theo (Autoregressive)
+            decoder_input = torch.cat([decoder_input, next_token], dim=1)
 
-            # 3. Dự đoán token tiếp theo
-            outs = self.decoder(trg_emb, encoder_outs, trg_mask=trg_mask, trg_causal_mask=trg_causal_mask, src_mask=src_mask)
-            logits = self.fc_out(outs)  # (1, len, vocab_size)
-
-            next_token = logits[:, -1, :].argmax(dim=-1).item()
-            trg_indexes.append(next_token)
-
-            # Dừng nếu gặp token <eos>
-            if next_token == self.vocab.eos_idx:
+            # Kiểm tra dừng (chỉ áp dụng nếu Batch_size = 1 hoặc xử lý riêng lẻ)
+            if batch_size == 1 and next_token.item() == self.vocab.eos_idx:
                 break
-        return torch.tensor(trg_indexes)
+
+        # 4. Nối các token dự đoán lại thành Tensor (Batch, Seq_len)
+        # Giống hệt logic outputs = torch.cat(outputs, dim=1) của bạn
+        outputs = torch.cat(outputs, dim=1)
+        
+        return outputs
