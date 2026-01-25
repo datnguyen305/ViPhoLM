@@ -26,13 +26,9 @@ class TextSumDatasetPhoneme(Dataset):
         
         # --- 1. Xử lý Source ---
         raw_source = item["source"]
-        # Source đang là dict { "0": ["cau1", "cau2"], "1": ... }
-        # Nối câu trong đoạn trước, rồi nối các đoạn bằng <nl>
-        # Cần thêm khoảng trắng quanh <nl> để tokenizer không bị dính chữ
         paragraphs = [" ".join(paragraph) for _, paragraph in raw_source.items()]
         source_str = " <nl> ".join(paragraphs) 
-        
-        # Tokenize trước khi đưa vào vocab (ViWordVocab nhận List[str])
+    
         source_tokens = preprocess_sentence(source_str)
         encoded_source = self._vocab.encode_caption(source_tokens)
 

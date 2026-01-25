@@ -18,10 +18,6 @@ def collate_fn_oov(items: List[Instance]) -> Instance:
     Collate function MỚI, được thiết kế để hoạt động với
     TextSumDatasetOOV (loại Dataset đã xử lý PGN).
     """
-    
-    # --- LƯU Ý QUAN TRỌNG ---
-    # Chúng ta phải giả định PAD_IDX là 0.
-    # Nếu vocab.pad_idx của bạn là một số khác, hãy thay số 0 ở dưới.
     PAD_IDX = 0
     
     # 1. Thu thập tất cả các tensor và list từ batch

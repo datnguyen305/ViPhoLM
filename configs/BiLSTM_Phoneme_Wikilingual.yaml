@@ -35,6 +35,7 @@ model:
   encoder:
     layer_dim: 3 #LSTM 3 layers
     input_dim: 512
+    # embed_dim: 64
     hidden_size: 512
     bidirectional: True
     dropout: 0.1
