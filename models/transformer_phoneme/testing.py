@@ -259,4 +259,4 @@ class Testing(nn.Module):
             # Dừng nếu gặp token <eos>
             if next_token == self.vocab.eos_idx:
                 break
-        return trg_indexes
+        return torch.tensor(trg_indexes)
