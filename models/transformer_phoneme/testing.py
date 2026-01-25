@@ -4,9 +4,9 @@ from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, config, vocab):
+    def __init__(self, config):
         super().__init__()
-        self.num_heads = config.nhead
+        self.num_heads = config.n_head
         self.d_model = config.hidden_size
         assert self.d_model % self.num_heads == 0, "d_model must be divisible by num_heads"
         self.d_k = self.d_model // self.num_heads
@@ -51,9 +51,9 @@ class MultiHeadAttention(nn.Module):
 class FeedForwardNetwork(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.linear1 = nn.Linear(config.hidden_size, config.dim_feedforward)
-        self.linear2 = nn.Linear(config.dim_feedforward, config.hidden_size)
-        self.dropout = nn.Dropout(config.dropout)
+        self.linear1 = nn.Linear(config.hidden_size, config.ffn_hidden)
+        self.linear2 = nn.Linear(config.ffn_hidden, config.hidden_size)
+        self.dropout = nn.Dropout(config.drop_prob)
 
     def forward(self, x):
         x = self.linear1(x)
@@ -70,13 +70,13 @@ class TransformerEncoderLayer(nn.Module):
         self.feed_forward = FeedForwardNetwork(config)
         # 2. Các thành phần chuẩn của một lớp Encoder
         self.linear1 = nn.Linear(config.hidden_size, config.dim_feedforward)
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.drop_prob)
         self.linear2 = nn.Linear(config.dim_feedforward, config.hidden_size)
 
         self.norm1 = nn.LayerNorm(config.hidden_size)
         self.norm2 = nn.LayerNorm(config.hidden_size)
-        self.dropout1 = nn.Dropout(config.dropout)
-        self.dropout2 = nn.Dropout(config.dropout)
+        self.dropout1 = nn.Dropout(config.drop_prob)
+        self.dropout2 = nn.Dropout(config.drop_prob)
 
     def forward(self, src, src_mask=None, src_causal_mask=None):
         # 1. Multi-Head Attention
@@ -111,13 +111,13 @@ class TransformerDecoderLayer(nn.Module):
         self.feed_forward = FeedForwardNetwork(config)
         # 2. Các thành phần chuẩn của một lớp Encoder
         self.linear1 = nn.Linear(config.hidden_size, config.dim_feedforward)
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.drop_prob)
         self.linear2 = nn.Linear(config.dim_feedforward, config.hidden_size)
 
         self.norm1 = nn.LayerNorm(config.hidden_size)
         self.norm2 = nn.LayerNorm(config.hidden_size)
-        self.dropout1 = nn.Dropout(config.dropout)
-        self.dropout2 = nn.Dropout(config.dropout)
+        self.dropout1 = nn.Dropout(config.drop_prob)
+        self.dropout2 = nn.Dropout(config.drop_prob)
 
     def forward(self, src, memory, src_mask=None, src_causal_mask=None):
         # 1. Masked Multi-Head Attention
