@@ -134,7 +134,7 @@ class ViWordVocab(Vocab):
                     sentence.append(self.eos_token)
                     continue
                 
-                sentence.append(self.unk_token)
+                continue
 
         # remove the <bos> and <eos> token
         if sentence[0] == self.bos_token:
