@@ -17,12 +17,14 @@ class MultiHeadAttention(nn.Module):
         self.linear_v = nn.Linear(self.d_model, self.d_model)
         self.linear_out = nn.Linear(self.d_model, self.d_model)
     def forward(self, query, key, value, mask=None, causal_mask=None):
-        B, S, _ = query.size()
+        B, S_q, _ = query.size() # Độ dài của Query
+        S_k = key.size(1)       # Độ dài của Key (quan trọng!)
+        S_v = value.size(1)     # Độ dài của Value
 
         # Linear projections
-        Q = self.linear_q(query).reshape(B, S, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S, d_k)
-        K = self.linear_k(key).reshape(B, S, self.num_heads, self.d_k).transpose(1, 2)    # (B, num_heads, S, d_k)
-        V = self.linear_v(value).reshape(B, S, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S, d_k)
+        Q = self.linear_q(query).reshape(B, S_q, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S, d_k)
+        K = self.linear_k(key).reshape(B, S_k, self.num_heads, self.d_k).transpose(1, 2)    # (B, num_heads, S, d_k)
+        V = self.linear_v(value).reshape(B, S_v, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S, d_k)
 
         # Scaled dot-product attention
         scores = torch.matmul(Q, K.transpose(-2, -1)) / torch.sqrt(torch.tensor(self.d_k, dtype=torch.float32, device=Q.device))
@@ -44,7 +46,7 @@ class MultiHeadAttention(nn.Module):
         attn_output = torch.matmul(attn_weights, V)  # (B, num_heads, S, S) * (B, num_heads, S, d_k) = (B, num_heads, S, d_k)
 
         # Concatenate heads and put through final linear layer
-        attn_output = attn_output.transpose(1, 2).reshape(B, S, self.d_model)  # (B, S, d_model)
+        attn_output = attn_output.transpose(1, 2).reshape(B, S_q, self.d_model)  # (B, S, num_heads * d_k)
         output = self.linear_out(attn_output)  # (B, S, d_model)
 
         return output
