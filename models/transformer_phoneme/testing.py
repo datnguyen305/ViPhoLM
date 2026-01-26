@@ -271,31 +271,34 @@ class Testing(nn.Module):
         self.loss = nn.CrossEntropyLoss()
         self.fc_out = nn.Linear(config.hidden_size, vocab.vocab_size)
 
-    def forward(self, src, trg):
-        # max_length_input = max_length_output 
+    def forward(self, src, tgt):
+        config = self.config
+        device = src.device
 
-        # src [<bos> ... <eos>]
-        # trg [ ....... <eos>]
-        src = src[:, :self.max_length]    
-        trg = trg[:, :self.max_length + 1]   
+        # 1. Xác định độ dài mục tiêu chung (S)
+        # Thường là giá trị nhỏ hơn giữa max thực tế và config.max_len
+        S = min(config.max_len, max(src.size(1), tgt.size(1)))
 
-        # Đảm bảo có token <eos> ở cuối chuỗi
-        if self.vocab.eos_idx not in src:
-            src[:, -1] = self.vocab.eos_idx
-        if self.vocab.eos_idx not in trg:
-            trg[:, -1] = self.vocab.eos_idx
-        
-        # Nếu chuỗi ngắn hơn max_length, điền pad_idx vào
-        src_padding = self.max_length - src.size(1)
-        trg_padding = self.max_length - trg.size(1)
-        if src_padding > 0:
-            src = torch.cat([src, torch.full((src.size(0), src_padding), self.vocab.pad_idx, dtype=torch.long, device=src.device)], dim=1)
-        if trg_padding > 0:
-            trg = torch.cat([trg, torch.full((trg.size(0), trg_padding), self.vocab.pad_idx, dtype=torch.long, device=trg.device)], dim=1)
+        # 2. Trim cả hai về S
+        src = src[:, :S]
+        tgt = tgt[:, :S]
+
+        # 3. Tạo hàm pad thủ công cho gọn
+        def pad_tensor(t, target_len, pad_idx):
+            curr_len = t.size(1)
+            if curr_len < target_len:
+                padding = torch.full((t.size(0), target_len - curr_len), 
+                                    pad_idx, dtype=t.dtype, device=t.device)
+                return torch.cat([t, padding], dim=1)
+            return t
+
+        # 4. Ép src và tgt về cùng độ dài S
+        src = pad_tensor(src, S, self.vocab.pad_idx)
+        tgt = pad_tensor(tgt, S, self.vocab.pad_idx)
 
         # Cắt chuỗi cho training
-        trg_input = trg[:, :-1]
-        trg_label = trg[:, -1:]
+        trg_input = tgt[:, :-1]
+        trg_label = tgt[:, 1:]
 
         # Embedding + Positional Encoding
         src_emb = self.PE(self.input_embedding(src))
