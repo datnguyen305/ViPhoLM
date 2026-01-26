@@ -278,28 +278,24 @@ class Testing(nn.Module):
 
         # 1. Xác định độ dài mục tiêu chung (S)
         # Thường là giá trị nhỏ hơn giữa max thực tế và config.max_len
-        S = min(config.max_length, max(src.size(1), trg.size(1)))
+        max_seq_len = max(src.size(1), trg.size(1) - 1)
+        S = min(config.max_length, max_seq_len)
 
-        # 2. Trim cả hai về S
-        src = src[:, :S]
-        trg = trg[:, :S + 1]
-
-        # 3. Tạo hàm pad thủ công cho gọn
-        def pad_tensor(t, target_len, pad_idx):
-            curr_len = t.size(1)
-            if curr_len < target_len:
-                padding = torch.full((t.size(0), target_len - curr_len), 
-                                    pad_idx, dtype=t.dtype, device=t.device)
+        def pad_to_length(t, length):
+            curr = t.size(1)
+            if curr < length:
+                padding = torch.full((t.size(0), length - curr), self.vocab.pad_idx, dtype=torch.long, device=device)
                 return torch.cat([t, padding], dim=1)
-            return t
+            return t[:, :length]
 
-        # 4. Ép src và trg về cùng độ dài S
-        src = pad_tensor(src, S, self.vocab.pad_idx)
-        trg = pad_tensor(trg, S, self.vocab.pad_idx)
+        src = pad_to_length(src, S)
+        trg = pad_to_length(trg, S + 1)
 
         # Cắt chuỗi cho training
-        trg_input = trg
+        trg_input = trg[:, :-1]
         trg_label = trg[:, 1:]
+
+        raise RuntimeError(f"Original src: {src.shape[1]} | trg_input: {trg_input.shape[1]} | trg_label: {trg_label.shape[1]}")
 
         # Embedding + Positional Encoding
         src_emb = self.PE(self.input_embedding(src))
@@ -322,50 +318,50 @@ class Testing(nn.Module):
     
     
     def predict(self, src):
+        # Hàm predict được viết lại để luôn duy trì Sq == Sk
         device = src.device
         batch_size = src.size(0)
-        seq_len = src.size(1)
+        pad_idx = self.vocab.pad_idx
         
-        # 1. Encoder (Chạy 1 lần duy nhất)
+        # 1. Chuẩn bị Encoder
+        # Pad src về max_length hoặc giữ nguyên, nhưng decoder phải theo độ dài này
+        S = src.size(1) 
+        
         src_emb = self.PE(self.input_embedding(src))
-        src_mask = create_padding_mask(src, self.vocab.pad_idx).to(device)
+        src_mask = create_padding_mask(src, pad_idx).to(device)
         encoder_outs = self.encoder(src_emb, src_mask=src_mask)
-        decoder_input = torch.full((batch_size, seq_len), self.vocab.pad_idx, dtype=torch.long, device=device)
-        decoder_input[:, 0] = self.vocab.bos_idx
-        # 2. Khởi tạo chuỗi đích với token bắt đầu <bos>
-        # trg_indexes: (1, 1)
-        outputs = []
-        for _ in range(self.MAX_LENGTH):
-            # Cần cộng PE cho input của decoder mỗi bước
+
+        # 2. Chuẩn bị Decoder Input CỐ ĐỊNH KÍCH THƯỚC (QUAN TRỌNG)
+        # Thay vì list append, ta tạo tensor full kích thước S ngay từ đầu
+        # Để đảm bảo Cross-Attention luôn là S x S
+        decoder_input = torch.full((batch_size, S), pad_idx, dtype=torch.long, device=device)
+        decoder_input[:, 0] = self.vocab.bos_idx # Gán token đầu tiên
+
+        # 3. Vòng lặp sinh từ
+        # Chỉ chạy đến S-1 vì token cuối cùng không dùng để dự đoán tiếp
+        for i in range(S - 1):
+            # Tạo mask
+            trg_mask = create_padding_mask(decoder_input, pad_idx)
+            trg_causal_mask = create_causal_mask(S, device=device)
+
+            # Forward Decoder (Luôn đưa cả chuỗi dài S vào)
             trg_emb = self.PE(self.output_embedding(decoder_input))
             
-            # Tạo mask cho chuỗi hiện tại
-            trg_mask = create_padding_mask(decoder_input, self.vocab.pad_idx)
-            trg_causal_mask = create_causal_mask(decoder_input.size(1), device=device)
-
-            # 3. Forward qua Decoder
             outs = self.decoder(trg_emb, encoder_outs, 
                                 trg_mask=trg_mask, 
                                 trg_causal_mask=trg_causal_mask, 
                                 src_mask=src_mask)
             
-            # Lấy logit của token cuối cùng: (Batch, 1, Vocab_size)
-            logits = self.fc_out(outs[:, -1:, :])
-            
-            # Dự đoán token tiếp theo: (Batch, 1)
-            next_token = logits.argmax(dim=-1)
-            
-            outputs.append(next_token)
-            
-            # Cập nhật decoder_input để dự đoán bước tiếp theo (Autoregressive)
-            decoder_input = torch.cat([decoder_input, next_token], dim=1)
+            # Lấy logit tại bước thứ i để dự đoán bước i+1
+            # logits shape: (Batch, 1, Vocab)
+            current_logits = self.fc_out(outs[:, i:i+1, :]) 
+            next_token = current_logits.argmax(dim=-1) # (Batch, 1)
 
-            # Kiểm tra dừng (chỉ áp dụng nếu Batch_size = 1 hoặc xử lý riêng lẻ)
+            # Cập nhật vào decoder_input tại vị trí i+1
+            decoder_input[:, i+1] = next_token.squeeze(-1)
+
+            # (Tùy chọn) Kiểm tra dừng sớm nếu batch=1
             if batch_size == 1 and next_token.item() == self.vocab.eos_idx:
                 break
-
-        # 4. Nối các token dự đoán lại thành Tensor (Batch, Seq_len)
-        # Giống hệt logic outputs = torch.cat(outputs, dim=1) của bạn
-        outputs = torch.cat(outputs, dim=1)
         
-        return outputs
+        return decoder_input
