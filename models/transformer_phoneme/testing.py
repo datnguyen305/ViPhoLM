@@ -294,8 +294,8 @@ class Testing(nn.Module):
             trg = torch.cat([trg, torch.full((trg.size(0), trg_padding), self.vocab.pad_idx, dtype=torch.long, device=trg.device)], dim=1)
 
         # Cắt chuỗi cho training
-        trg_input = trg[:,:-1]
-        trg_label = trg
+        trg_input = trg[:, :-1]
+        trg_label = trg[:, -1:]
 
         # Embedding + Positional Encoding
         src_emb = self.PE(self.input_embedding(src))
