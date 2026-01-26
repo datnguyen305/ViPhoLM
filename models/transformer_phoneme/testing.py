@@ -20,7 +20,7 @@ class Phrasal_Lexeme(nn.Module):
         scores = torch.matmul(intermediate, key.transpose(-2, -1))  # (B, S, S)
         r_left = torch.diagonal(scores, offset=-1, dim1=-2, dim2=-1) # (B, S-1)
         r_right = torch.diagonal(scores, offset=1, dim1=-2, dim2=-1) # (B, S-1)
-        left_side = r_left[:, 1:]
+        left_side = r_left[:, :]
         right_side = r_right[:, :-1] 
 
         comparison = torch.stack([left_side, right_side], dim=-1) # (B, S-2, 2)
