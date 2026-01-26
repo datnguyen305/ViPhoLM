@@ -282,7 +282,7 @@ class Testing(nn.Module):
 
         # 2. Trim cả hai về S
         src = src[:, :S]
-        trg = trg[:, :S]
+        trg = trg[:, :S + 1]
 
         # 3. Tạo hàm pad thủ công cho gọn
         def pad_tensor(t, target_len, pad_idx):
