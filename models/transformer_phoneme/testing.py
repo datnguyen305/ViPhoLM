@@ -104,7 +104,7 @@ class MultiHeadAttention(nn.Module):
             else:
                 p_gate = p_score.unsqueeze(-1).unsqueeze(-1)
         else:
-            p_gate = 1.0
+            raise
 
         attn_weights = torch.softmax(scores, dim=-1)  # (B, num_heads, S_q, S_k)
 
@@ -296,7 +296,7 @@ class Testing(nn.Module):
             trg = torch.cat([trg, torch.full((trg.size(0), trg_padding), self.vocab.pad_idx, dtype=torch.long, device=trg.device)], dim=1)
 
         # Cắt chuỗi cho training
-        trg_input = trg[:, :-1]
+        trg_input = trg
         trg_label = trg[:, 1:]
 
         # Embedding + Positional Encoding
