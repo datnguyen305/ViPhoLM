@@ -69,54 +69,57 @@ class Testing(nn.Module):
         return logits, loss
     
     def predict(self, src):
+        config = self.config
         device = src.device
-        B, S = src.size()
+        B = src.size(0)
         
-        target_len = self.config.max_length 
+        # --- BƯỚC 1: ĐỒNG BỘ KÍCH THƯỚC (QUAN TRỌNG) ---
+        # Để Cross-Attention chạy được Phrasal_Lexeme, Src và Trg phải cùng độ dài.
+        # Ta lấy max_length làm chuẩn chung.
+        target_len = self.config.max_length
 
-        src = src[:, :self.config.max_length]
+        # Xử lý SRC: Ép về đúng độ dài target_len
+        if src.size(1) < target_len:
+            pad_len = target_len - src.size(1)
+            src = torch.cat([src, torch.full((B, pad_len), self.vocab.pad_idx, device=device)], dim=1)
+        else:
+            src = src[:, :target_len]
 
+        # --- BƯỚC 2: CHẠY ENCODER ---
         src_emb = self.PE(self.input_embedding(src))
         src_mask = create_padding_mask(src, self.vocab.pad_idx).to(device)
         encoder_outs = self.encoder(src_emb, src_mask=src_mask)
 
+        # --- BƯỚC 3: CHUẨN BỊ DECODER (FIXED BUFFER) ---
+        # Tạo sẵn bộ đệm cố định, không dùng append/cat
         decoder_input = torch.full((B, target_len), self.vocab.pad_idx, dtype=torch.long, device=device)
-        decoder_input[:, 0] = self.vocab.bos_idx # Gán token đầu tiên
+        decoder_input[:, 0] = self.vocab.bos_idx 
 
-        # 2. Khởi tạo chuỗi đích với token bắt đầu <bos>
-        # trg_indexes: (1, 1)
-        outputs = []
-        for i in range(self.MAX_LENGTH):
-            # Cần cộng PE cho input của decoder mỗi bước
+        # --- BƯỚC 4: VÒNG LẶP SINH TỪ ---
+        # Chỉ chạy đến target_len - 1
+        for i in range(target_len - 1):
+            # Mask luôn cố định kích thước
+            trg_mask = create_padding_mask(decoder_input, self.vocab.pad_idx).to(device)
+            trg_causal_mask = create_causal_mask(target_len, device=device)
+
+            # Forward toàn bộ chuỗi (kích thước luôn là target_len)
             trg_emb = self.PE(self.output_embedding(decoder_input))
-            
-            # Tạo mask cho chuỗi hiện tại
-            trg_mask = create_padding_mask(decoder_input, self.vocab.pad_idx)
-            trg_causal_mask = create_causal_mask(decoder_input.size(1), device=device)
-
-            # 3. Forward qua Decoder
             outs = self.decoder(trg_emb, encoder_outs, 
                                 trg_mask=trg_mask, 
                                 trg_causal_mask=trg_causal_mask, 
                                 src_mask=src_mask)
             
-            # Lấy logit của token cuối cùng: (Batch, 1, Vocab_size)
-            logits = self.fc_out(outs[:, -1:, :])
-            
-            # Dự đoán token tiếp theo: (Batch, 1)
-            next_token = logits.argmax(dim=-1)
-            
-            outputs.append(next_token)
-            
-            # Cập nhật decoder_input để dự đoán bước tiếp theo (Autoregressive)
-            decoder_input = torch.cat([decoder_input, next_token], dim=1)
+            # SỬA LỖI LOGIC: Lấy output tại đúng vị trí i, không phải -1
+            # Tại bước i, ta dùng thông tin từ 0..i để dự đoán i+1
+            current_out = outs[:, i:i+1, :] 
+            logits = self.fc_out(current_out) 
+            next_token = logits.argmax(dim=-1) # (B, 1)
 
-            # Kiểm tra dừng (chỉ áp dụng nếu Batch_size = 1 hoặc xử lý riêng lẻ)
+            # SỬA LỖI CRASH: Gán trực tiếp vào buffer, KHÔNG dùng torch.cat
+            decoder_input[:, i+1] = next_token.squeeze(-1)
+
+            # Kiểm tra dừng sớm (chỉ hiệu quả với batch=1)
             if B == 1 and next_token.item() == self.vocab.eos_idx:
-                break
+                return decoder_input[:, :i+2]
 
-        # 4. Nối các token dự đoán lại thành Tensor (Batch, Seq_len)
-        # Giống hệt logic outputs = torch.cat(outputs, dim=1) của bạn
-        outputs = torch.cat(outputs, dim=1)
-        
-        return outputs
+        return decoder_input
