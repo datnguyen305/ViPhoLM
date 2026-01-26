@@ -69,7 +69,7 @@ class Testing(nn.Module):
     
     def predict(self, src):
         device = src.device
-        B, S, _ = src.size()
+        B, S = src.size()
         
         # 1. Encoder (Chạy 1 lần duy nhất)
         src_emb = self.PE(self.input_embedding(src))
