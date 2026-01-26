@@ -262,6 +262,7 @@ class Testing(nn.Module):
         self.encoder = TransformerEncoderBlock(config.encoder, vocab)
         self.decoder = TransformerDecoderBlock(config.decoder, vocab)
         self.PE = PositionalEncoding(config.hidden_size, max_len=5000)
+        self.config = config
         
         self.vocab = vocab
         self.MAX_LENGTH = vocab.max_sentence_length + 2 # +2 for BOS and EOS tokens
