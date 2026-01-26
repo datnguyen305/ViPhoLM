@@ -286,6 +286,7 @@ class Testing(nn.Module):
             trg[:, -1] = self.vocab.eos_idx
         if self.vocab.bos_idx not in trg:
             trg[:, 0] = self.vocab.bos_idx
+        # trg [<bos> ... <eos>]
         
         # Nếu chuỗi ngắn hơn max_length, điền pad_idx vào
         src_padding = self.max_length - src.size(1)
@@ -296,7 +297,7 @@ class Testing(nn.Module):
             trg = torch.cat([trg, torch.full((trg.size(0), trg_padding), self.vocab.pad_idx, dtype=torch.long, device=trg.device)], dim=1)
 
         # Cắt chuỗi cho training
-        trg_input = trg
+        trg_input = trg[:, :-1]
         trg_label = trg[:, 1:]
 
         # Embedding + Positional Encoding
