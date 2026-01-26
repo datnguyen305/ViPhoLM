@@ -75,7 +75,7 @@ class MultiHeadAttention(nn.Module):
 
         # Linear projections
         Q = self.linear_q(query).reshape(B, S_q, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S_q, d_k)
-        K = self.linear_k(key).reshape(B, S_k, self.num_heads, self.d_k).transpose(1, 2)    # (B, num_heads, S_k, d_k)
+        K = self.linear_k(key).reshape(B, S_q, self.num_heads, self.d_k).transpose(1, 2)    # (B, num_heads, S_q, d_k)
         V = self.linear_v(value).reshape(B, S_v, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S_v, d_k)
 
         # Scaled dot-product attention
