@@ -298,7 +298,7 @@ class Testing(nn.Module):
         trg = pad_tensor(trg, S, self.vocab.pad_idx)
 
         # Cắt chuỗi cho training
-        trg_input = trg[:, :-1]
+        trg_input = trg
         trg_label = trg[:, 1:]
 
         # Embedding + Positional Encoding
