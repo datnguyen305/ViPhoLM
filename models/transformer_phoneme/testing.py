@@ -18,6 +18,7 @@ class Testing(nn.Module):
         self.PE = PositionalEncoding(config.hidden_size, max_len=5000)
         self.config = config
         
+        self.MAX_LENGTH = vocab.max_sentence_length + 2
         self.vocab = vocab
         self.d_model = config.d_model
 
@@ -75,13 +76,13 @@ class Testing(nn.Module):
         src_emb = self.PE(self.input_embedding(src))
         src_mask = create_padding_mask(src, self.vocab.pad_idx).to(device)
         encoder_outs = self.encoder(src_emb, src_mask=src_mask)
-        decoder_input = torch.full((B, S), self.vocab.pad_idx, dtype=torch.long, device=device)
+        decoder_input = torch.full((B, S + 1), self.vocab.pad_idx, dtype=torch.long, device=device)
         decoder_input[:, 0] = self.vocab.bos_idx # Gán token đầu tiên
 
         # 2. Khởi tạo chuỗi đích với token bắt đầu <bos>
         # trg_indexes: (1, 1)
         outputs = []
-        for _ in range(S - 1):
+        for _ in range(self.MAX_LENGTH):
             # Cần cộng PE cho input của decoder mỗi bước
             trg_emb = self.PE(self.output_embedding(decoder_input))
             
