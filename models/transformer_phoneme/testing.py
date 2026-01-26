@@ -4,25 +4,45 @@ from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
 import math
 
-# class Kernel(nn.Module):
-#     def __init__(self, config):
-#         super().__init__()
-#         self.linear = nn.Linear(config.hidden_size, config.hidden_size, bias = False)
+class Phrasal_Lexeme(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.linear = nn.Linear(config.hidden_size, config.hidden_size, bias = False)
 
-#     def forward(self, query, key):
-#         # query: (B, S_q, D)
-#         # key: (B, S_k, D)
+    def forward(self, query, key):
+        # query: (B, S, D)
+        # key: (B, S, D)
 
-#         intermediate = self.linear(query)  # (B, S_q, D)
+        intermediate = self.linear(query)  # (B, S, D)
 
-#         # intermediate: (B, S_q, D)
-#         # key.transpose: (B, D, S_k)
-#         scores = torch.matmul(intermediate, key.transpose(-2, -1))  # (B, S_q, S_k)
-#         return scores
+        # intermediate: (B, S, D)
+        # key.transpose: (B, D, S)
+        scores = torch.matmul(intermediate, key.transpose(-2, -1))  # (B, S, S)
+        r_left = torch.diagonal(scores, offset=-1, dim1=-2, dim2=-1) # (B, H, S-1)
+        r_right = torch.diagonal(scores, offset=1, dim1=-2, dim2=-1) # (B, H, S-1)
+        left_side = r_left[:, :, 1:]
+        right_side = r_right[:, :, :-1] 
 
+        comparison = torch.stack([left_side, right_side], dim=-1) # (B, H, S-2, 2)
+        pr = torch.softmax(comparison, dim=-1)
+        """
+            => pr[:,:,i,0] left_side
+            => pr[:,:,i,1] right_side
+            dim = (B, H, S-2)
 
+        """
+        # Pi = sqrt(left_side * right_side)
+        left_side = pr[:, :, :, 0] 
+        right_side = pr[:, :, :, 1]
+        Pi = torch.sqrt(left_side * right_side)  
+        # Pi: (B, H, S-2)
+        log_P = torch.log(Pi + 1e-8)  # tránh log(0)
+        # log_P: (B, H, S-2)
+        Pi_j = torch.exp(torch.sum(log_P, dim=-1)) 
         
-
+        # Pi_j: (B, H)
+        return Pi_j
+ 
 class MultiHeadAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -35,6 +55,8 @@ class MultiHeadAttention(nn.Module):
         self.linear_k = nn.Linear(self.d_model, self.d_model)
         self.linear_v = nn.Linear(self.d_model, self.d_model)
         self.linear_out = nn.Linear(self.d_model, self.d_model)
+
+        self.phrasal_lexeme = Phrasal_Lexeme(config)
 
     def forward(self, query, key, value, mask=None, causal_mask=None):
         B, S_q, _ = query.size() # Độ dài của Query
@@ -61,7 +83,15 @@ class MultiHeadAttention(nn.Module):
         if final_mask is not None:
             scores = scores.masked_fill(final_mask == 0, float('-inf'))
 
+        phrasal_score = self.phrasal_lexeme(query, key) 
+        # phrasal_score: (B, H)
+        phrasal_score_h = phrasal_score.view(B, self.num_heads, -1).mean(dim=-1) # (B, num_heads)
+        P_gate = phrasal_score_h.unsqueeze(-1).unsqueeze(-1)
+        # (B, num_heads, 1, 1)
+
         attn_weights = torch.softmax(scores, dim=-1)  # (B, num_heads, S_q, S_k)
+
+        attn_weights = attn_weights * P_gate  # (B, num_heads, S_q, S_k)
 
         attn_output = torch.matmul(attn_weights, V)  # (B, num_heads, S_q, S_k) * (B, num_heads, S_k, d_k) = (B, num_heads, S_q, d_k)
 
