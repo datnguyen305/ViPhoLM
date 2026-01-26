@@ -295,8 +295,6 @@ class Testing(nn.Module):
         trg_input = trg[:, :-1]
         trg_label = trg[:, 1:]
 
-        raise RuntimeError(f"Original src: {src.shape[1]} | trg_input: {trg_input.shape[1]} | trg_label: {trg_label.shape[1]}")
-
         # Embedding + Positional Encoding
         src_emb = self.PE(self.input_embedding(src))
         trg_emb = self.PE(self.output_embedding(trg_input))
