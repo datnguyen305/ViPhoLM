@@ -72,17 +72,28 @@ class Testing(nn.Module):
         device = src.device
         B, S = src.size()
         
-        # 1. Encoder (Chạy 1 lần duy nhất)
+        target_len = self.config.max_length 
+
+        # 1. Xử lý SRC: Pad hoặc Cut về đúng target_len
+        if src.size(1) < target_len:
+            pad_len = target_len - src.size(1)
+            # Thêm padding vào sau src
+            src = torch.cat([src, torch.full((B, pad_len), self.vocab.pad_idx, device=device)], dim=1)
+        else:
+            # Cắt bớt nếu dài hơn
+            src = src[:, :target_len]
+
         src_emb = self.PE(self.input_embedding(src))
         src_mask = create_padding_mask(src, self.vocab.pad_idx).to(device)
         encoder_outs = self.encoder(src_emb, src_mask=src_mask)
-        decoder_input = torch.full((B, S + 1), self.vocab.pad_idx, dtype=torch.long, device=device)
+
+        decoder_input = torch.full((B, target_len), self.vocab.pad_idx, dtype=torch.long, device=device)
         decoder_input[:, 0] = self.vocab.bos_idx # Gán token đầu tiên
 
         # 2. Khởi tạo chuỗi đích với token bắt đầu <bos>
         # trg_indexes: (1, 1)
         outputs = []
-        for _ in range(self.MAX_LENGTH):
+        for i in range(self.MAX_LENGTH):
             # Cần cộng PE cho input của decoder mỗi bước
             trg_emb = self.PE(self.output_embedding(decoder_input))
             
