@@ -44,17 +44,17 @@ class MultiHeadAttention(nn.Module):
 
         # Tính xác suất cụm từ P_{i,j} (B)
         # Lưu ý: Nếu bài báo muốn mỗi head một P, bạn cần sửa Phrasal_Lexeme trả về (B, H)
-        p_score = self.phrasal_lexeme(query, key) 
+        # p_score = self.phrasal_lexeme(query, key) 
         
         # Chuyển đổi p_score để nhân element-wise (B, H, 1, 1) hoặc (B, 1, 1, 1)
-        if p_score.dim() == 1:
-            p_gate = p_score.view(B, 1, 1, 1)
-        else:
-            p_gate = p_score.unsqueeze(-1).unsqueeze(-1)
+        # if p_score.dim() == 1:
+        #     p_gate = p_score.view(B, 1, 1, 1)
+        # else:
+        #     p_gate = p_score.unsqueeze(-1).unsqueeze(-1)
 
         attn_weights = torch.softmax(scores, dim=-1)  # (B, num_heads, S_q, S_k)
 
-        attn_weights = attn_weights * p_gate  # (B, num_heads, S_q, S_k)
+        # attn_weights = attn_weights * p_gate  # (B, num_heads, S_q, S_k)
 
         attn_output = torch.matmul(attn_weights, V)  # (B, num_heads, S_q, S_k) * (B, num_heads, S_k, d_k) = (B, num_heads, S_q, d_k)
 
