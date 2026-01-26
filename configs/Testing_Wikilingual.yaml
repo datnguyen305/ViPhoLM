@@ -33,7 +33,7 @@ model:
   dim_feedforward: 2048
   ffn_hidden: 2048
   drop_prob: 0.1
-  max_length: 2024
+  max_length: 2025
   encoder:
     hidden_size: 512
     n_head: 8

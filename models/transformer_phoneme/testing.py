@@ -12,6 +12,16 @@ class Phrasal_Lexeme(nn.Module):
     def forward(self, query, key):
         # query: (B, S, D)
         # key: (B, S, D)
+        Sk = key.size(1)
+        Sq = query.size(1)
+
+        if Sq != Sk:
+            raise ValueError(
+                f"Phrasal_Lexeme module chỉ hỗ trợ ma trận vuông (Self-Attention). "
+                f"Nhưng hiện tại nhận được Sq={Sq} và Sk={Sk}. "
+                f"Hãy kiểm tra xem bạn có đang vô tình gọi module này trong Cross-Attention của Decoder không."
+            )
+
 
         intermediate = self.linear(query)  # (B, S, D)
 
