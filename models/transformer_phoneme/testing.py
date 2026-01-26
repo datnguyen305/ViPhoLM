@@ -74,14 +74,7 @@ class Testing(nn.Module):
         
         target_len = self.config.max_length 
 
-        # 1. Xử lý SRC: Pad hoặc Cut về đúng target_len
-        if src.size(1) < target_len:
-            pad_len = target_len - src.size(1)
-            # Thêm padding vào sau src
-            src = torch.cat([src, torch.full((B, pad_len), self.vocab.pad_idx, device=device)], dim=1)
-        else:
-            # Cắt bớt nếu dài hơn
-            src = src[:, :target_len]
+        src = src[:, :self.config.max_length]
 
         src_emb = self.PE(self.input_embedding(src))
         src_mask = create_padding_mask(src, self.vocab.pad_idx).to(device)
