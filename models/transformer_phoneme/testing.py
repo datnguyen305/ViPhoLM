@@ -273,17 +273,17 @@ class Testing(nn.Module):
 
     def forward(self, src, trg):
         # max_length_input = max_length_output 
-        src = src[:, :self.max_length]   # src [<bos> ... <eos>] 
-        trg = trg[:, :self.max_length]   # trg [ ... <eos>]
+
+        # src [<bos> ... <eos>]
+        # trg [ ....... <eos>]
+        src = src[:, :self.max_length]    
+        trg = trg[:, :self.max_length + 1]   
 
         # Đảm bảo có token <eos> ở cuối chuỗi
         if self.vocab.eos_idx not in src:
             src[:, -1] = self.vocab.eos_idx
         if self.vocab.eos_idx not in trg:
             trg[:, -1] = self.vocab.eos_idx
-        if self.vocab.bos_idx not in trg:
-            trg[:, 0] = self.vocab.bos_idx
-        # trg [<bos> ... <eos>]
         
         # Nếu chuỗi ngắn hơn max_length, điền pad_idx vào
         src_padding = self.max_length - src.size(1)
