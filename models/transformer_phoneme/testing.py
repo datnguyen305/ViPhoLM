@@ -18,29 +18,29 @@ class Phrasal_Lexeme(nn.Module):
         # intermediate: (B, S, D)
         # key.transpose: (B, D, S)
         scores = torch.matmul(intermediate, key.transpose(-2, -1))  # (B, S, S)
-        r_left = torch.diagonal(scores, offset=-1, dim1=-2, dim2=-1) # (B, H, S-1)
-        r_right = torch.diagonal(scores, offset=1, dim1=-2, dim2=-1) # (B, H, S-1)
-        left_side = r_left[:, :, 1:]
-        right_side = r_right[:, :, :-1] 
+        r_left = torch.diagonal(scores, offset=-1, dim1=-2, dim2=-1) # (B, S-1)
+        r_right = torch.diagonal(scores, offset=1, dim1=-2, dim2=-1) # (B, S-1)
+        left_side = r_left[:, 1:]
+        right_side = r_right[:, :-1] 
 
-        comparison = torch.stack([left_side, right_side], dim=-1) # (B, H, S-2, 2)
+        comparison = torch.stack([left_side, right_side], dim=-1) # (B, S-2, 2)
         pr = torch.softmax(comparison, dim=-1)
         """
-            => pr[:,:,i,0] left_side
-            => pr[:,:,i,1] right_side
-            dim = (B, H, S-2)
+            => pr[:,i,0] left_side
+            => pr[:,i,1] right_side
+            dim = (B, S-2)
 
         """
         # Pi = sqrt(left_side * right_side)
-        left_side = pr[:, :, :, 0] 
-        right_side = pr[:, :, :, 1]
+        left_side = pr[:, :, 0] 
+        right_side = pr[:, :, 1]
         Pi = torch.sqrt(left_side * right_side)  
-        # Pi: (B, H, S-2)
+        # Pi: (B, S-2)
         log_P = torch.log(Pi + 1e-8)  # tránh log(0)
-        # log_P: (B, H, S-2)
+        # log_P: (B, S-2)
         Pi_j = torch.exp(torch.sum(log_P, dim=-1)) 
         
-        # Pi_j: (B, H)
+        # Pi_j: (B)
         return Pi_j
  
 class MultiHeadAttention(nn.Module):
@@ -84,10 +84,9 @@ class MultiHeadAttention(nn.Module):
             scores = scores.masked_fill(final_mask == 0, float('-inf'))
 
         phrasal_score = self.phrasal_lexeme(query, key) 
-        # phrasal_score: (B, H)
-        phrasal_score_h = phrasal_score.view(B, self.num_heads, -1).mean(dim=-1) # (B, num_heads)
-        P_gate = phrasal_score_h.unsqueeze(-1).unsqueeze(-1)
-        # (B, num_heads, 1, 1)
+        # phrasal_score: (B)
+        P_gate = phrasal_score.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        # (B, 1, 1, 1)
 
         attn_weights = torch.softmax(scores, dim=-1)  # (B, num_heads, S_q, S_k)
 
