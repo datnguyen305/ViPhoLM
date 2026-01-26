@@ -278,7 +278,7 @@ class Testing(nn.Module):
 
         # 1. Xác định độ dài mục tiêu chung (S)
         # Thường là giá trị nhỏ hơn giữa max thực tế và config.max_len
-        S = min(config.max_len, max(src.size(1), tgt.size(1)))
+        S = min(config.max_length, max(src.size(1), tgt.size(1)))
 
         # 2. Trim cả hai về S
         src = src[:, :S]
