@@ -320,13 +320,14 @@ class Testing(nn.Module):
     def predict(self, src):
         device = src.device
         batch_size = src.size(0)
+        seq_len = src.size(1)
         
         # 1. Encoder (Chạy 1 lần duy nhất)
         src_emb = self.PE(self.input_embedding(src))
         src_mask = create_padding_mask(src, self.vocab.pad_idx).to(device)
         encoder_outs = self.encoder(src_emb, src_mask=src_mask)
-        decoder_input = torch.full((batch_size, 1), self.vocab.bos_idx, dtype=torch.long, device=device)
-
+        decoder_input = torch.full((batch_size, seq_len), self.vocab.pad_idx, dtype=torch.long, device=device)
+        decoder_input[:, 0] = self.vocab.bos_idx
         # 2. Khởi tạo chuỗi đích với token bắt đầu <bos>
         # trg_indexes: (1, 1)
         outputs = []
