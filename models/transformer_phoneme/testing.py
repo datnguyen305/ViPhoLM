@@ -272,17 +272,17 @@ class Testing(nn.Module):
         self.loss = nn.CrossEntropyLoss()
         self.fc_out = nn.Linear(config.hidden_size, vocab.vocab_size)
 
-    def forward(self, src, tgt):
+    def forward(self, src, trg):
         config = self.config
         device = src.device
 
         # 1. Xác định độ dài mục tiêu chung (S)
         # Thường là giá trị nhỏ hơn giữa max thực tế và config.max_len
-        S = min(config.max_length, max(src.size(1), tgt.size(1)))
+        S = min(config.max_length, max(src.size(1), trg.size(1)))
 
         # 2. Trim cả hai về S
         src = src[:, :S]
-        tgt = tgt[:, :S]
+        trg = trg[:, :S]
 
         # 3. Tạo hàm pad thủ công cho gọn
         def pad_tensor(t, target_len, pad_idx):
@@ -293,13 +293,13 @@ class Testing(nn.Module):
                 return torch.cat([t, padding], dim=1)
             return t
 
-        # 4. Ép src và tgt về cùng độ dài S
+        # 4. Ép src và trg về cùng độ dài S
         src = pad_tensor(src, S, self.vocab.pad_idx)
-        tgt = pad_tensor(tgt, S, self.vocab.pad_idx)
+        trg = pad_tensor(trg, S, self.vocab.pad_idx)
 
         # Cắt chuỗi cho training
-        trg_input = tgt[:, :-1]
-        trg_label = tgt[:, 1:]
+        trg_input = trg[:, :-1]
+        trg_label = trg[:, 1:]
 
         # Embedding + Positional Encoding
         src_emb = self.PE(self.input_embedding(src))
