@@ -1,6 +1,6 @@
 from torch import nn
 from vocabs.vocab import Vocab
-from layer.encoder_layers import TransformerEncoderLayer
+from ..layer.encoder_layers import TransformerEncoderLayer
 
 
 class TransformerEncoderBlock(nn.Module):

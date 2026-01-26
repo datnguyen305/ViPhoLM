@@ -1,7 +1,7 @@
 from torch import nn
 from vocabs.vocab import Vocab
-from attention.multihead_attention import MultiHeadAttention
-from modules.ffn import FeedForwardNetwork
+from ..attention.multihead_attention import MultiHeadAttention
+from ..modules.ffn import FeedForwardNetwork
 
 class TransformerEncoderLayer(nn.Module):
     def __init__(self, config, vocab: Vocab):

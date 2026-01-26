@@ -1,7 +1,6 @@
 from torch import nn
 from vocabs.vocab import Vocab
-from layer.decoder_layers import TransformerDecoderLayer
-
+from ..layer.decoder_layers import TransformerDecoderLayer
 class TransformerDecoderBlock(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super().__init__()

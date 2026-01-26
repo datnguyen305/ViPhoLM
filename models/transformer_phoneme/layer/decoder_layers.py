@@ -1,6 +1,6 @@
 from torch import nn
-from models.transformer_phoneme.attention.multihead_attention import MultiHeadAttention
-from models.transformer_phoneme.testing import FeedForwardNetwork
+from ..attention.multihead_attention import MultiHeadAttention
+from ..modules.ffn import FeedForwardNetwork
 from vocabs.vocab import Vocab
 
 

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from models.transformer_phoneme.attention.phrasal_lexeme import Phrasal_Lexeme
+from .phrasal_lexeme import Phrasal_Lexeme
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, config):
