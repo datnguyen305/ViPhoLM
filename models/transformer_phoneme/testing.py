@@ -4,6 +4,25 @@ from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
 import math
 
+# class Kernel(nn.Module):
+#     def __init__(self, config):
+#         super().__init__()
+#         self.linear = nn.Linear(config.hidden_size, config.hidden_size, bias = False)
+
+#     def forward(self, query, key):
+#         # query: (B, S_q, D)
+#         # key: (B, S_k, D)
+
+#         intermediate = self.linear(query)  # (B, S_q, D)
+
+#         # intermediate: (B, S_q, D)
+#         # key.transpose: (B, D, S_k)
+#         scores = torch.matmul(intermediate, key.transpose(-2, -1))  # (B, S_q, S_k)
+#         return scores
+
+
+        
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -16,22 +35,23 @@ class MultiHeadAttention(nn.Module):
         self.linear_k = nn.Linear(self.d_model, self.d_model)
         self.linear_v = nn.Linear(self.d_model, self.d_model)
         self.linear_out = nn.Linear(self.d_model, self.d_model)
+
     def forward(self, query, key, value, mask=None, causal_mask=None):
         B, S_q, _ = query.size() # Độ dài của Query
         S_k = key.size(1)       # Độ dài của Key (quan trọng!)
         S_v = value.size(1)     # Độ dài của Value
 
         # Linear projections
-        Q = self.linear_q(query).reshape(B, S_q, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S, d_k)
-        K = self.linear_k(key).reshape(B, S_k, self.num_heads, self.d_k).transpose(1, 2)    # (B, num_heads, S, d_k)
-        V = self.linear_v(value).reshape(B, S_v, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S, d_k)
+        Q = self.linear_q(query).reshape(B, S_q, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S_q, d_k)
+        K = self.linear_k(key).reshape(B, S_k, self.num_heads, self.d_k).transpose(1, 2)    # (B, num_heads, S_k, d_k)
+        V = self.linear_v(value).reshape(B, S_v, self.num_heads, self.d_k).transpose(1, 2)  # (B, num_heads, S_v, d_k)
 
         # Scaled dot-product attention
         scores = torch.matmul(Q, K.transpose(-2, -1)) / torch.sqrt(torch.tensor(self.d_k, dtype=torch.float32, device=Q.device))
         final_mask = None
         if mask is not None and causal_mask is not None:
             # Kết hợp cả hai bằng phép toán AND (logic &)
-            # mask (B, 1, 1, S_k) & casual_mask (1, 1, S, S_k) -> (B, 1, S, S_k)
+            # mask (B, 1, 1, S_k) & casual_mask (1, 1, S_q, S_k) -> (B, 1, S_q, S_k)
             final_mask = mask & causal_mask
         elif mask is not None:
             final_mask = mask
@@ -41,19 +61,18 @@ class MultiHeadAttention(nn.Module):
         if final_mask is not None:
             scores = scores.masked_fill(final_mask == 0, float('-inf'))
 
-        attn_weights = torch.softmax(scores, dim=-1)  # (B, num_heads, S, S)
+        attn_weights = torch.softmax(scores, dim=-1)  # (B, num_heads, S_q, S_k)
 
-        attn_output = torch.matmul(attn_weights, V)  # (B, num_heads, S, S) * (B, num_heads, S, d_k) = (B, num_heads, S, d_k)
+        attn_output = torch.matmul(attn_weights, V)  # (B, num_heads, S_q, S_k) * (B, num_heads, S_k, d_k) = (B, num_heads, S_q, d_k)
 
         # Concatenate heads and put through final linear layer
-        attn_output = attn_output.transpose(1, 2).reshape(B, S_q, self.d_model)  # (B, S, num_heads * d_k)
-        output = self.linear_out(attn_output)  # (B, S, d_model)
-
+        attn_output = attn_output.transpose(1, 2).reshape(B, S_q, self.d_model)  # (B, S_q, num_heads * d_k)
+        output = self.linear_out(attn_output)  # (B, S_q, d_model)
         return output
         
 class FeedForwardNetwork(nn.Module):
     def __init__(self, config):
-        super().__init__()
+        super().__init__() 
         self.linear1 = nn.Linear(config.hidden_size, config.ffn_hidden)
         self.linear2 = nn.Linear(config.ffn_hidden, config.hidden_size)
         self.dropout = nn.Dropout(config.drop_prob)
@@ -91,6 +110,7 @@ class TransformerEncoderLayer(nn.Module):
         # 2. Feed Forward Network
         ffn_output = self.dropout2(self.feed_forward(self.norm2(output1)))
         output = ffn_output + output1
+        #  # (B, S_q, hidden-size)
         return output 
     
 class TransformerEncoderBlock(nn.Module):
@@ -203,10 +223,29 @@ class Testing(nn.Module):
         self.MAX_LENGTH = vocab.max_sentence_length + 2 # +2 for BOS and EOS tokens
         self.d_model = config.d_model
 
+        self.max_length = config.max_length
         self.loss = nn.CrossEntropyLoss()
         self.fc_out = nn.Linear(config.hidden_size, vocab.vocab_size)
 
     def forward(self, src, trg):
+        # max_length_input = max_length_output 
+        src = src[:, :self.max_length]   # src [<bos> ... <eos>] 
+        trg = trg[:, :self.max_length]   # trg [<bos> ... <eos>]
+
+        # Đảm bảo có token <eos> ở cuối chuỗi
+        if self.vocab.eos_idx not in src:
+            src[:, -1] = self.vocab.eos_idx
+        if self.vocab.eos_idx not in trg:
+            trg[:, -1] = self.vocab.eos_idx
+        
+        # Nếu chuỗi ngắn hơn max_length, điền pad_idx vào
+        src_padding = self.max_length - src.size(1)
+        trg_padding = self.max_length - trg.size(1)
+        if src_padding > 0:
+            src = torch.cat([src, torch.full((src.size(0), src_padding), self.vocab.pad_idx, dtype=torch.long, device=src.device)], dim=1)
+        if trg_padding > 0:
+            trg = torch.cat([trg, torch.full((trg.size(0), trg_padding), self.vocab.pad_idx, dtype=torch.long, device=trg.device)], dim=1)
+
         # Cắt chuỗi cho training
         trg_input = trg[:, :-1]
         trg_label = trg[:, 1:]
@@ -216,8 +255,8 @@ class Testing(nn.Module):
         trg_emb = self.PE(self.output_embedding(trg_input))
 
         # Masking
-        src_mask = create_padding_mask(src, self.vocab.pad_idx)
-        trg_mask = create_padding_mask(trg_input, self.vocab.pad_idx)
+        src_mask = create_padding_mask(src, self.vocab.pad_idx).to(src.device)
+        trg_mask = create_padding_mask(trg_input, self.vocab.pad_idx).to(trg_input.device)
         trg_causal_mask = create_causal_mask(trg_input.size(1), device=trg.device)
 
         # Encoder - Decoder
