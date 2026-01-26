@@ -2,11 +2,11 @@ import torch
 from torch import nn
 from vocabs.vocab import Vocab
 from builders.model_builder import META_ARCHITECTURE
-from modules.pe import PositionalEncoding
-from blocks.encoder_block import TransformerEncoderBlock
-from blocks.decoder_block import TransformerDecoderBlock
-from utils.casual_mask import create_causal_mask
-from utils.pad_mask import create_padding_mask
+from .modules.pe import PositionalEncoding
+from .blocks.encoder_block import TransformerEncoderBlock
+from .blocks.decoder_block import TransformerDecoderBlock
+from .utils.casual_mask import create_causal_mask
+from .utils.pad_mask import create_padding_mask
 @META_ARCHITECTURE.register()
 class Testing(nn.Module):
     def __init__(self, config, vocab: Vocab):
