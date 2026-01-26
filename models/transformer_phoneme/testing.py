@@ -295,7 +295,7 @@ class Testing(nn.Module):
 
         # Cắt chuỗi cho training
         trg_input = trg
-        trg_label = trg[:, 1:]  # Dịch chuyển trái 1 vị trí
+        trg_label = trg 
 
         # Embedding + Positional Encoding
         src_emb = self.PE(self.input_embedding(src))
