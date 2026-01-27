@@ -1,9 +1,8 @@
 from typing import List
 from utils.instance import Instance, InstanceList
-
 from .text_sum_dataset import TextSumDataset
 from .text_sum_dataset_phoneme import TextSumDatasetPhoneme
-# from .text_sum_dataset_hierarchical import TextSumDatasetHierarchical   
+from .text_sum_dataset_hierarchy import TextSumDatasetHierarchy
 from .text_sum_dataset_oov import TextSumDatasetOOV
 from .text_sum_dataset_seneca import TextSumDatasetSeneca
 import torch
@@ -68,6 +67,7 @@ def collate_fn_oov(items: List[Instance]) -> Instance:
         extended_source_idx = input_ids_padded,
         extra_zeros = extra_zeros
     )
+
 def collate_fn_seneca(batch):
     """
     batch: List[Instance]
@@ -128,3 +128,46 @@ def collate_fn_seneca(batch):
         "id": [x.id for x in batch]
     }
 
+def collate_fn_hierarchy(items: List[Instance], pad_idx = 0) -> Instance:
+    MAX_SENTS = 30
+    MAX_WORDS = 50  
+
+    target_len = MAX_SENTS * MAX_WORDS
+    ids = []
+    input_ids_list = []
+    labels_list = []
+    shifted_labels_list = []
+    encoded_document_lists = []
+
+    for instance in items:
+        ids.append(instance.id)
+        labels_list.append(instance.label)
+        shifted_labels_list.append(instance.shifted_right_label)
+        encoded_document_lists.append(instance.encoded_document)
+
+        # Pad input_ids to target_len
+        curr_ids = instance.input_ids
+        if len(curr_ids) < target_len:
+            curr_ids = torch.cat([curr_ids, torch.full((target_len - len(curr_ids),), pad_idx)])
+        else:
+            curr_ids = curr_ids[:target_len]
+        input_ids_list.append(curr_ids)
+
+
+    input_ids_padded = torch.stack(input_ids_list)
+
+    labels_padded = pad_sequence(
+        labels_list, batch_first=True, padding_value=pad_idx
+    )
+    shifted_labels_padded = pad_sequence(
+        shifted_labels_list, batch_first=True, padding_value=pad_idx
+    )
+    
+    input_ids_padded = input_ids_padded.view(len(items), MAX_SENTS, MAX_WORDS)
+
+    return Instance(
+        id = ids,
+        input_ids = input_ids_padded,
+        label = labels_padded,
+        shifted_right_label = shifted_labels_padded,
+    )
