@@ -46,7 +46,7 @@ class ViWordVocab(Vocab):
         # Lấy list đường dẫn từ config (Đã sửa ở bước trước)
         json_paths = [config.TRAIN, config.DEV, config.TEST]
         phonemes = set()
-
+        self.max_sentence_length = 0
         # Collect token stats from each JSON
         for path in json_paths:
             if not os.path.exists(path):
@@ -77,6 +77,9 @@ class ViWordVocab(Vocab):
                     components = analyze_Vietnamese(word)
                     if components:
                         phonemes.update([phoneme for phoneme in components if phoneme])
+
+                if self.max_sentence_length < len(target_text):
+                    self.max_sentence_length = len(target_text)
 
         return phonemes
 

@@ -1,3 +1,3 @@
 from .vocab import Vocab
 from .viword_vocab import ViWordVocab
-# from .hierarchicalVocab import HierarchicalVocab
+from .hierarchy_vocab import Hierarchy_Vocab

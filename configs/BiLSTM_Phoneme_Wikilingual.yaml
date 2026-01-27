@@ -1,0 +1,59 @@
+vocab:
+  type: ViWordVocab
+  path:
+    train: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+    dev: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
+    test: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
+  TRAIN: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+  DEV: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
+  TEST: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
+  JSON_PATH: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+  TOKENIZER: null
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDatasetPhoneme
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDatasetPhoneme
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
+  test: 
+    type: TextSumDatasetPhoneme
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
+  batch_size: 4
+  num_workers: 4
+
+model:
+  name: BiLSTM_Model_Phoneme_3layer_Wikilingual
+  architecture: BiLSTM_Model_Phoneme
+  d_model: 512
+  encoder:
+    layer_dim: 3 #LSTM 3 layers
+    input_dim: 512
+    # embed_dim: 64
+    hidden_size: 512
+    bidirectional: True
+    dropout: 0.1
+  decoder:
+    use_attention: True
+    layer_dim: 3
+    input_dim: 512
+    hidden_size: 512
+    bidirectional: False
+    dropout: 0.1
+  label_smoothing: 0.1
+  device: cuda
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.15
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTaskPhoneme
