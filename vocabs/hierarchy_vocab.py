@@ -78,6 +78,7 @@ class Hierarchy_Vocab(Vocab):
         """Turn a document into a vector of indices and a document length"""
         vec_sentence = {}
         for i, sentence in enumerate(document):
+                sentence = preprocess_sentence(sentence)
                 vec_sentence[i] = sentence      
         vec = torch.tensor(list(vec_sentence.keys()), dtype=torch.long) # No <bod> and <eod> for document
         return vec

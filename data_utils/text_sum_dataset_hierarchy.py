@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset
 import json
-
+import torch 
 from builders.dataset_builder import META_DATASET
 from utils.instance import Instance
 from vocabs.hierarchy_vocab import Hierarchy_Vocab
@@ -18,7 +18,9 @@ class TextSumDatasetHierarchy(Dataset):
         self._data = json.load(open(path,  encoding='utf-8'))
         self._keys = list(self._data.keys())
         self._vocab = vocab
-
+        self.MAX_SENTENCE_LENGTH = config.get("max_sentence_length", 50) 
+        self.MAX_SENTS = config.get("max_sentences", 10)
+        self.pad_idx = self._vocab.pad_idx
     def __len__(self) -> int:
         return len(self._data)
 
@@ -28,23 +30,26 @@ class TextSumDatasetHierarchy(Dataset):
         
         paragraphs = item["source"]
 
-        # document
-        document = paragraphs["0"]
-        # words in document
-        paragraphs = [" ".join(paragraph) for _, paragraph in paragraphs.items()]
-        source = "<nl>".join(paragraphs) # new line mark
+        # document aka sentence
+        document = [s + "<nl>" for paragraph in paragraphs.values() for s in paragraph]
+
+        sentences = [self._vocab.encode_sentence(sentence) for sentence in document]
+        # sentences = [max_sentences, max_sentence_length]
+
+        input_ids = torch.full((self.MAX_SENTS, self.MAX_SENTENCE_LENGTH), self.pad_idx, dtype=torch.long)
+        
+        for i, s_tokens in enumerate(sentences[:self.MAX_SENTS]):
+            # Cắt bớt nếu câu quá dài
+            valid_tokens = s_tokens[:self.MAX_SENTENCE_LENGTH]
+            input_ids[i, :len(valid_tokens)] = torch.tensor(valid_tokens)
+
         target = item["target"]
-
-        encoded_document = self._vocab.encode_document(document)
-        encoded_source = self._vocab.encode_sentence(source)
         encoded_target = self._vocab.encode_sentence(target)
-
         shifted_right_label = encoded_target[1:]
        
         return Instance(
             id = key,
-            input_ids = encoded_source, # word level
+            input_ids = input_ids,
             label = encoded_target,
             shifted_right_label = shifted_right_label,
-            encoded_document = encoded_document # sentence level
         )

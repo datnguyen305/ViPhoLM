@@ -6,7 +6,7 @@ import json
 from builders.task_builder import META_TASK
 from builders.dataset_builder import build_dataset
 from tasks.base_task import BaseTask
-from data_utils import collate_fn_hierarchy
+from data_utils import collate_fn
 import evaluation
 
 @META_TASK.register()
@@ -32,21 +32,21 @@ class TextSumTaskHierarchy(BaseTask):
             batch_size=config.dataset.batch_size,
             shuffle=True,
             num_workers=config.dataset.num_workers,
-            collate_fn=collate_fn_hierarchy
+            collate_fn=collate_fn
         )
         self.dev_dataloader = DataLoader(
             dataset=self.dev_dataset,
             batch_size=1,
             shuffle=True,
             num_workers=config.dataset.num_workers,
-            collate_fn=collate_fn_hierarchy
+            collate_fn=collate_fn
         )
         self.test_dataloader = DataLoader(
             dataset=self.test_dataset,
             batch_size=1,
             shuffle=True,
             num_workers=config.dataset.num_workers,
-            collate_fn=collate_fn_hierarchy
+            collate_fn=collate_fn
         )
     
     def get_vocab(self): 
