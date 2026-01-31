@@ -39,9 +39,9 @@ class TextSumDatasetHierarchy(Dataset):
         input_ids = torch.full((self.MAX_SENTS, self.MAX_SENTENCE_LENGTH), self.pad_idx, dtype=torch.long)
         
         for i, s_tokens in enumerate(sentences[:self.MAX_SENTS]):
-            # Cắt bớt nếu câu quá dài
             valid_tokens = s_tokens[:self.MAX_SENTENCE_LENGTH]
-            input_ids[i, :len(valid_tokens)] = torch.tensor(valid_tokens)
+            input_ids[i, :len(valid_tokens)] = valid_tokens.clone()
+
 
         target = item["target"]
         encoded_target = self._vocab.encode_sentence(target)
