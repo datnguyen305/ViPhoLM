@@ -1,0 +1,56 @@
+vocab:
+  type: Hierarchy_Vocab
+  path:
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDatasetViword
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDatasetViword
+    path: datasets/Wikilingual-dataset/dev.json
+  test: 
+    type: TextSumDatasetViword
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 16
+  num_workers: 4
+
+model:
+  name: ViWordTransformer_Wikilingual
+  architecture: ViWordTransformerModel
+  hidden_size: 512
+  d_model: 512
+  drop_prob: 0.1
+  use_cotext_gate: True
+  encoder:
+    n_layers: 4
+    n_head: 8
+    hidden_size: 512
+    ffn_hidden: 2048
+    drop_prob: 0.1
+  decoder:
+    n_layers: 4
+    n_head: 8
+    hidden_size: 512
+    ffn_hidden: 2048
+    drop_prob: 0.1
+  label_smoothing: 0.1
+  device: cpu
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.15
+  lr_coverage: 0.15
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTaskViWord

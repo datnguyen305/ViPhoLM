@@ -24,32 +24,53 @@ class TextSumDatasetHierarchy(Dataset):
     def __len__(self) -> int:
         return len(self._data)
 
+    # def __getitem__(self, index: int) -> Instance:
+    #     key = self._keys[index]
+    #     item = self._data[key]
+        
+    #     paragraphs = item["source"]
+
+    #     # document aka sentence
+    #     document = [s + "<nl>" for paragraph in paragraphs.values() for s in paragraph]
+
+    #     sentences = [self._vocab.encode_sentence(sentence) for sentence in document]
+    #     # sentences = [max_sentences, max_sentence_length]
+
+    #     input_ids = torch.full((self.MAX_SENTS, self.MAX_SENTENCE_LENGTH), self.pad_idx, dtype=torch.long)
+        
+    #     for i, s_tokens in enumerate(sentences[:self.MAX_SENTS]):
+    #         valid_tokens = s_tokens[:self.MAX_SENTENCE_LENGTH]
+    #         input_ids[i, :len(valid_tokens)] = valid_tokens.clone()
+
+
+    #     target = item["target"]
+    #     encoded_target = self._vocab.encode_sentence(target)
+    #     shifted_right_label = encoded_target[1:]
+       
+    #     return Instance(
+    #         id = key,
+    #         input_ids = input_ids,
+    #         label = encoded_target,
+    #         shifted_right_label = shifted_right_label,
+    #     )
+
     def __getitem__(self, index: int) -> Instance:
         key = self._keys[index]
         item = self._data[key]
-        
+
         paragraphs = item["source"]
+        document = [s for paragraph in paragraphs.values() for s in paragraph]
 
-        # document aka sentence
-        document = [s + "<nl>" for paragraph in paragraphs.values() for s in paragraph]
-
-        sentences = [self._vocab.encode_sentence(sentence) for sentence in document]
-        # sentences = [max_sentences, max_sentence_length]
-
-        input_ids = torch.full((self.MAX_SENTS, self.MAX_SENTENCE_LENGTH), self.pad_idx, dtype=torch.long)
-        
-        for i, s_tokens in enumerate(sentences[:self.MAX_SENTS]):
-            valid_tokens = s_tokens[:self.MAX_SENTENCE_LENGTH]
-            input_ids[i, :len(valid_tokens)] = valid_tokens.clone()
-
+        # list of (Si,)
+        input_ids = self._vocab.encode_document(document)
 
         target = item["target"]
         encoded_target = self._vocab.encode_sentence(target)
-        shifted_right_label = encoded_target[1:]
-       
+
         return Instance(
-            id = key,
-            input_ids = input_ids,
-            label = encoded_target,
-            shifted_right_label = shifted_right_label,
+            id=key,
+            input_ids=input_ids,          # list[Tensor]
+            label=encoded_target,
+            shifted_right_label=encoded_target[1:],
+            pad_idx=self.pad_idx
         )

@@ -5,6 +5,7 @@ from .text_sum_dataset_phoneme import TextSumDatasetPhoneme
 from .text_sum_dataset_hierarchy import TextSumDatasetHierarchy
 from .text_sum_dataset_oov import TextSumDatasetOOV
 from .text_sum_dataset_seneca import TextSumDatasetSeneca
+from .text_sum_dataset_viword import TextSumDatasetViword
 import torch
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
@@ -171,3 +172,91 @@ def collate_fn_hierarchy(items: List[Instance], pad_idx = 0) -> Instance:
         label = labels_padded,
         shifted_right_label = shifted_labels_padded,
     )
+
+
+    
+def collate_fn_viword(batch):
+    """
+    Collate function for hierarchical text summarization.
+    
+    batch[i].input_ids = list of sentence tensors, each of shape (Si,)
+    batch[i].label = target tensor of shape (T,)
+    
+    Returns:
+        dict with:
+            - input_ids: (B, N, S) where N=max sentences, S=max sentence length
+            - shifted_right_label: (B, T-1) - input to decoder
+            - label: (B, T-1) - target for decoder
+            - id: list of sample ids
+    """
+    if len(batch) == 0:
+        raise ValueError("Empty batch")
+    
+    batch_size = len(batch)
+    
+    # Get padding index from first item
+    pad_idx = batch[0].pad_idx if hasattr(batch[0], 'pad_idx') else 0
+    
+    # Find max number of sentences and max sentence length
+    max_n_sent = 0
+    max_sent_len = 0
+    
+    for item in batch:
+        # item.input_ids is a list of tensors
+        n_sents = len(item.input_ids)
+        max_n_sent = max(max_n_sent, n_sents)
+        
+        for sent_tensor in item.input_ids:
+            # Ensure sent_tensor is actually a tensor with dimensions
+            if not isinstance(sent_tensor, torch.Tensor):
+                raise TypeError(f"Expected tensor, got {type(sent_tensor)}")
+            
+            # Check if tensor has dimensions
+            if sent_tensor.dim() == 0:
+                raise ValueError(f"Sentence tensor has no dimensions (scalar tensor)")
+            
+            sent_len = sent_tensor.size(0)
+            max_sent_len = max(max_sent_len, sent_len)
+    
+    # Handle edge case of empty sentences
+    if max_sent_len == 0:
+        max_sent_len = 1
+    if max_n_sent == 0:
+        max_n_sent = 1
+    
+    # Create padded tensor for source sentences
+    src = torch.full(
+        (batch_size, max_n_sent, max_sent_len),
+        pad_idx,
+        dtype=torch.long
+    )
+    
+    # Fill in the actual sentence data
+    for i, item in enumerate(batch):
+        for j, sent_tensor in enumerate(item.input_ids):
+            sent_len = sent_tensor.size(0)
+            src[i, j, :sent_len] = sent_tensor
+    
+    # Pad target sequences
+    target_tensors = []
+    for item in batch:
+        if isinstance(item.label, torch.Tensor):
+            target_tensors.append(item.label)
+        else:
+            # Convert to tensor if it's not already
+            target_tensors.append(torch.tensor(item.label, dtype=torch.long))
+    
+    trg = pad_sequence(
+        target_tensors,
+        batch_first=True,
+        padding_value=pad_idx
+    )
+    
+    # Return batched data
+    # Note: We split target into input (shifted_right_label) and output (label)
+    return {
+        "input_ids": src,                    # (B, N, S)
+        "shifted_right_label": trg,          # (B, T) - full target for model.forward()
+        "label": trg[:, 1:],                 # (B, T-1) - for loss calculation
+        "id": [item.id for item in batch],
+    }
