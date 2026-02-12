@@ -197,28 +197,35 @@ class EncoderLayer(nn.Module):
 class DecoderLayer(nn.Module):
     def __init__(self, config, vocab):
         super().__init__()
-        self.group_attn = GroupAttention(config)
-        self.self_attn = ScaledDotProductAttention(config)
+        # Self-Attention chuẩn (thay thế GroupAttention + ScaledDotProduct)
+        self.self_attn = nn.MultiheadAttention(config.d_model, config.head, batch_first=True)
+        
+        # Cross-Attention (Giữ nguyên)
         self.cross_attn = nn.MultiheadAttention(config.d_model, config.head, batch_first=True)
+        
         self.feed_forward = PositionwiseFeedForward(config)
         self.sublayer = clones(SublayerConnection(config), 3)
 
-    def forward(self, x, memory, tgt_mask, memory_mask, group_prob):
+    def forward(self, x, memory, tgt_mask, memory_mask, group_prob=None):
         """
-        x: (B, T, D) - Target embedding
-        memory: (B, S, D) - Sentence-level encoder outputs
-        tgt_mask: (B, T) - Padding mask của target
-        memory_mask: (B, S) - Padding mask của encoder sentences
+        x: (B, T, D)
+        memory: (B, S, D)
+        tgt_mask: (T, T) - Causal mask chuẩn cho nn.MultiheadAttention
+        memory_mask: (B, S) - Padding mask cho encoder
         """
-        group_prob, break_prob = self.group_attn(x, tgt_mask, group_prob)
-        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, group_prob, tgt_mask))
+        # 1. Standard Self-Attention
+        # Lưu ý: tgt_mask ở đây nên là dạng (T, T) hoặc (B*H, T, T) cho nn.MultiheadAttention
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, attn_mask=tgt_mask)[0])
+        
+        # 2. Cross-Attention
         x = self.sublayer[1](x, lambda x: self.cross_attn(query=x, 
                                                          key=memory, 
                                                          value=memory, 
                                                          key_padding_mask=~memory_mask.bool())[0])
+        # 3. Feed Forward
         x = self.sublayer[2](x, self.feed_forward)
         
-        return x, group_prob, break_prob
+        return x, None, None # Trả về None cho group_prob và break_prob
 
 
 class TransformerEncoderBlock(nn.Module):
