@@ -129,6 +129,12 @@ def collate_fn_seneca(batch):
         "id": [x.id for x in batch]
     }
 
+def _move_instance_to(instance, device):
+    for k, v in instance.items():
+        if torch.is_tensor(v):
+            instance[k] = v.to(device)
+    return instance
+
 def collate_fn_hierarchy(items: List[Instance], pad_idx = 0) -> Instance:
     MAX_SENTS = 30
     MAX_WORDS = 50  
@@ -172,17 +178,9 @@ def collate_fn_hierarchy(items: List[Instance], pad_idx = 0) -> Instance:
         label = labels_padded,
         shifted_right_label = shifted_labels_padded,
     )
-
-    # Gán động phương thức .to() cho đối tượng này nếu nó chưa có
-    def move_to(device):
-        for k, v in res.items():
-            if torch.is_tensor(v):
-                res[k] = v.to(device)
-        return res
     
     # Gán hàm move_to vào thuộc tính 'to' của đối tượng res
-    res.to = move_to 
-
+    res.to = lambda device: _move_instance_to(res, device)
     return res
 
 
