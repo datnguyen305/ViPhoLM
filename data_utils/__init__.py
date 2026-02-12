@@ -166,12 +166,24 @@ def collate_fn_hierarchy(items: List[Instance], pad_idx = 0) -> Instance:
     
     input_ids_padded = input_ids_padded.view(len(items), MAX_SENTS, MAX_WORDS)
 
-    return Instance(
+    res = Instance(
         id = ids,
         encoded_document = input_ids_padded,
         label = labels_padded,
         shifted_right_label = shifted_labels_padded,
     )
+
+    # Gán động phương thức .to() cho đối tượng này nếu nó chưa có
+    def move_to(device):
+        for k, v in res.items():
+            if torch.is_tensor(v):
+                res[k] = v.to(device)
+        return res
+    
+    # Gán hàm move_to vào thuộc tính 'to' của đối tượng res
+    res.to = move_to 
+
+    return res
 
 
     
