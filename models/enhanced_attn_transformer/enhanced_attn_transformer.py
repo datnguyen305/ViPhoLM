@@ -408,10 +408,12 @@ def create_padding_mask(seq, pad_idx):
 
 def create_causal_mask(seq_len, device):
     """
-    Tạo mask Causal (Che tương lai) 4D.
-    Logic: 1 = Quá khứ (Giữ), 0 = Tương lai (Che).
-    Output Shape: (1, 1, T, T)
+    Tạo mask Causal dạng Boolean.
+    Logic: True (1) = Giữ, False (0) = Che.
     """
-    # Tạo ma trận tam giác dưới toàn số 1
-    mask = torch.tril(torch.ones(seq_len, seq_len, device=device))
-    return mask.unsqueeze(0).unsqueeze(0) # (1, 1, T, T)
+    # LỖI CŨ: torch.ones(...) -> tạo ra Float
+    # SỬA: thêm .bool() hoặc .long() vào cuối
+    mask = torch.tril(torch.ones(seq_len, seq_len, device=device)).bool()
+    
+    # Shape: (1, 1, T, T)
+    return mask.unsqueeze(0).unsqueeze(0)
