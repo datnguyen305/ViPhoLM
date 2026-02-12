@@ -7,10 +7,8 @@ from .attention import PhrasalLexemeAttention
 
 class LocalAttention(nn.Module):
     """
-    Local (sentence-level) attention using:
-    - Standard self-attention
-    - PhrasalLexemeAttention constraint
-    Output: 1 vector per sentence
+    Local (sentence-level) attention sử dụng PhrasalLexemeAttention 
+    để trích xuất đặc trưng cụm từ/lexeme trước khi pooling thành vector câu.
     """
 
     def __init__(self, head, hidden_size, dropout=0.1):
@@ -19,24 +17,18 @@ class LocalAttention(nn.Module):
         self.head = head
         self.d_kv = hidden_size // head
 
-        # Standard self-attention (A)
-        self.self_attn = nn.MultiheadAttention(
-            embed_dim=hidden_size,
-            num_heads=head,
-            dropout=dropout,
-            batch_first=True
-        )
-        
+        # Phrasal Lexeme Attention
         self.phrasal_attn_module = PhrasalLexemeAttention(
             head=head,
             d_model=hidden_size,
             d_q=self.d_kv,
-            d_kv=self.d_kv,
+            d_kv=self.d_kv
         )
         
         self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(hidden_size)
         
+        # Add value projection to match standard attention mechanism
         self.value_proj = nn.Linear(hidden_size, hidden_size)
         self.output_proj = nn.Linear(hidden_size, hidden_size)
 
@@ -93,7 +85,6 @@ class LocalAttention(nn.Module):
         sent_repr[empty_indices] = 0.0
 
         return sent_repr, attn_weights
-
 
 
 class FeedForward(nn.Module):
@@ -162,17 +153,16 @@ class HierarchicalEncoderLayer(nn.Module):
         x = self.norm1(x + self.dropout(out))
         x = self.norm2(x + self.dropout(self.ffn(x)))
         return x
-    
-    
+
 
 class HierarchicalEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-
+        
         self.local_attn = LocalAttention(
             head=config.n_head,
             hidden_size=config.hidden_size,
-            dropout=config.drop_prob,
+            dropout=config.drop_prob
         )
 
         self.sent_encoder = nn.ModuleList([
@@ -185,7 +175,6 @@ class HierarchicalEncoder(nn.Module):
             for _ in range(config.n_layers)
         ])
 
-
     def forward(self, x, mask):
         """
         x    : (B, N, S, D)
@@ -193,33 +182,24 @@ class HierarchicalEncoder(nn.Module):
         
         Returns:
             sent_repr: (B, N, D)
-            sent_importance: (B, N)
         """
         B, N, S, D = x.size()
 
-        # ---- token → sentence ----
+        # ---- token → sentence (Sử dụng Phrasal Lexeme) ----
         x_flat = x.view(B * N, S, D)
-        mask_flat = mask.view(B * N, S).bool()  # Ensure bool
+        mask_flat = mask.view(B * N, S).bool()
 
-        # Get sentence representation (B*N, D)
-        sent_repr, _ = self.local_attn(
-            x_flat,
-            mask_flat,
-            phrasal_attn=None
-        )
+        # Trích xuất đặc trưng câu dựa trên lexeme
+        sent_repr, _ = self.local_attn(x_flat, mask_flat)
 
-        # Reshape to (B, N, D)
         sent_repr = sent_repr.view(B, N, D)
+        sent_mask = (mask.sum(dim=-1) > 0).float()
 
-        # sent_mask: 1 if sentence has at least one valid token, 0 otherwise
-        sent_mask = (mask.sum(dim=-1) > 0).float()  # (B, N)
-
-        # ---- sentence encoder ----
+        # ---- sentence encoder (Global context giữa các câu) ----
         for layer in self.sent_encoder:
             sent_repr = layer(sent_repr, sent_mask)
 
         return sent_repr
-
 
 
 # ---------------------------------------------------------------------------
@@ -307,17 +287,12 @@ class DecoderLayer(nn.Module):
         x = self.norm1(x + self.dropout(_x))
 
         # cross-attention
-        _x = self.cross_attn(
-            x,
-            memory,
-            memory_mask,
-        )
+        _x = self.cross_attn(x, memory, memory_mask)
         x = self.norm2(x + self.dropout(_x))
 
         # FFN
         x = self.norm3(x + self.dropout(self.ffn(x)))
         return x
-
 
 
 # ---------------------------------------------------------------------------
@@ -355,15 +330,13 @@ class ViWordTransformerModel(nn.Module):
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.pad_idx)
         self.vocab = vocab
 
-    # ------------------------------------------------------------------
     def _encode(self, src):
         """Shared encoder logic for forward() and predict().
 
         src: (B, N, S)  – token ids
         Returns:
-            memory         : (B, N, D)  -- sentence representations
-            memory_mask    : (B, N)
-            sentence_bias  : (B, N)
+            memory      : (B, N, D)  -- sentence representations
+            memory_mask : (B, N)
         """
         B, N, S = src.size()
 
@@ -376,19 +349,13 @@ class ViWordTransformerModel(nn.Module):
         src_mask_3d = (src != self.vocab.pad_idx)  # (B, N, S)
 
         # Call encoder - returns sentence representations
-        # memory, sentence_importance = self.encoder(src_emb, src_mask_3d)
-        memory, _ = self.encoder(src_emb, src_mask_3d) # memory: (B, N, D)
-    
+        memory = self.encoder(src_emb, src_mask_3d)
 
         # Memory mask: which sentences are valid (not all padding)
         memory_mask = (src_mask_3d.sum(dim=-1) > 0).float()  # (B, N)
 
-        # Use sentence importance as bias
-        # sentence_bias = sentence_importance  # (B, N)
-
         return memory, memory_mask
 
-    # ------------------------------------------------------------------
     def forward(self, src, trg):
         """
         src: (B, N_sent, S_token)
@@ -397,7 +364,7 @@ class ViWordTransformerModel(nn.Module):
         trg_input = trg[:, :-1]   # drop last (teacher forcing input)
         trg_label = trg[:, 1:]    # drop first (prediction target)
 
-        memory, memory_mask, sentence_bias = self._encode(src)
+        memory, memory_mask = self._encode(src)
 
         # --- decoder ---
         dec_emb = self.pe(self.embed(trg_input))  # (B, T-1, D)
@@ -411,12 +378,7 @@ class ViWordTransformerModel(nn.Module):
 
         out = dec_emb
         for layer in self.decoder_layers:
-            out = layer(
-                out, 
-                memory, 
-                tgt_causal_mask, 
-                memory_mask
-            )
+            out = layer(out, memory, tgt_causal_mask, memory_mask)
 
         logits = self.fc_out(out)  # (B, T-1, vocab)
         loss = self.loss_fn(
@@ -426,15 +388,14 @@ class ViWordTransformerModel(nn.Module):
         
         return logits, loss
 
-    # ------------------------------------------------------------------
     @torch.no_grad()
     def predict(self, src):
         """
         src: (B, N, S) - source token ids
         max_len: maximum generation length (optional)
         """
-        self.eval()
-        device = self.device
+        self.eval()  # Ensure model is in eval mode
+        device = src.device
         B = src.size(0)
 
         memory, memory_mask = self._encode(src)
@@ -452,12 +413,7 @@ class ViWordTransformerModel(nn.Module):
 
             out = dec_emb
             for layer in self.decoder_layers:
-                out = layer(
-                    out,
-                    memory,
-                    tgt_causal_mask,
-                    memory_mask
-                )
+                out = layer(out, memory, tgt_causal_mask, memory_mask)
 
             next_token = self.fc_out(out[:, -1]).argmax(dim=-1, keepdim=True)
             ys = torch.cat([ys, next_token], dim=1)
