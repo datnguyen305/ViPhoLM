@@ -168,7 +168,7 @@ def collate_fn_hierarchy(items: List[Instance], pad_idx = 0) -> Instance:
 
     return Instance(
         id = ids,
-        input_ids = input_ids_padded,
+        encoded_document = input_ids_padded,
         label = labels_padded,
         shifted_right_label = shifted_labels_padded,
     )
