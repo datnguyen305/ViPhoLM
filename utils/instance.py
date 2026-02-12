@@ -27,6 +27,15 @@ class Instance(OrderedDict):
 
         """
         return list(self.keys())
+    
+    def to(self, *args: Any, **kwargs: Any) -> "Instance":
+        """
+        Chuyển tất cả các trường dữ liệu (Tensors) sang device chỉ định.
+        """
+        for k, v in self.items():
+            if hasattr(v, "to"):
+                self[k] = v.to(*args, **kwargs)
+        return self
 
 class InstanceList(OrderedDict):
     def __init__(self, instance_list: List["Instance"] = [], pad_value=0):

@@ -83,9 +83,7 @@ class TextSumTaskHierarchy(BaseTask):
         gts = {}
         with tqdm(desc='Epoch %d - Evaluating' % (self.epoch+1), unit='it', total=len(dataloader)) as pbar:
             for items in dataloader:
-                for key in items.keys():
-                    if torch.is_tensor(items[key]):
-                        items[key] = items[key].to(self.device)
+                items = items.to(self.device)
                 input_ids = items.input_ids
                 label = items.label
                 with torch.no_grad():
