@@ -82,12 +82,20 @@ class TextSumTaskHierarchy(BaseTask):
         gens = {}
         gts = {}
         with tqdm(desc='Epoch %d - Evaluating' % (self.epoch+1), unit='it', total=len(dataloader)) as pbar:
-            for items in dataloader:
+            for i, items in enumerate(dataloader):
                 items = items.to(self.device)
                 input_ids = items.input_ids
                 label = items.label
                 with torch.no_grad():
                     prediction = self.model.predict(input_ids)
+                    # Log mẫu đầu tiên của mỗi Epoch để debug
+                    if i == 0:
+                        raw_pred = prediction[0].tolist()
+                        decoded_pred = self.vocab.decode_sentence(prediction)[0]
+                        decoded_gt = self.vocab.decode_sentence(label)[0]
+                        self.logger.info(f"\n[DEBUG] IDs: {raw_pred}")
+                        self.logger.info(f"[DEBUG] Pred: '{decoded_pred}'")
+                        self.logger.info(f"[DEBUG] Target: '{decoded_gt}'")
 
                     prediction = self.vocab.decode_sentence(prediction)
                     label = self.vocab.decode_sentence(label)
