@@ -288,12 +288,10 @@ class EnhancedAttnTransformerModel(nn.Module):
         self.MAX_LENGTH = vocab.max_sentence_length + 2
         self.config = config
 
-        # Khối Encoder & Decoder
         self.word_encoder = TransformerEncoderBlock(config.encoder, vocab)
         self.sentence_encoder = StandardTransformerEncoder(config.encoder)
         self.decoder = TransformerDecoderBlock(config.decoder, vocab)
         
-        # Positional Encoding
         self.Word_PE = PositionalEncoding(self.d_model, max_len=5000)
         self.Sen_PE = PositionalEncoding(self.d_model, max_len=100)
         
@@ -304,32 +302,30 @@ class EnhancedAttnTransformerModel(nn.Module):
         B, S, W = src.size()
         device = src.device
 
-        # --- ENCODER (Giữ nguyên GroupAttention) ---
+        # --- ENCODER: GROUP ATTENTION CẦN MASK 4D ---
         src_flat = src.view(B * S, W)
-        # Mask Encoder tự viết (Shape: B, 1, 1, S) - Giữ nguyên logic cũ của Encoder
+        # SỬA: Tạo mask 4D thủ công (B*S, 1, 1, W) để khớp với GroupAttention
+        # Không dùng hàm create_padding_mask (vì hàm đó trả về 2D cho Decoder)
         src_mask_flat = (src_flat != self.vocab.pad_idx).unsqueeze(1).unsqueeze(2)
+        
         encoder_outs_word, _ = self.word_encoder(src_flat, src_mask_flat)
         
         sent_repr = encoder_outs_word.view(B, S, W, -1).mean(dim=2)
         sent_repr = self.Sen_PE(sent_repr)
         
-        # Mask cho Cross-Attention (Chuẩn PyTorch: True là Pad)
-        # sent_mask shape: (B, S)
+        # Mask cho Sentence Encoder (Standard -> Cần 2D Bool)
         sent_mask_bool = (src.sum(dim=-1) == self.vocab.pad_idx * W).to(device)
-        
-        # Encoder Sentence dùng nn.MultiheadAttention -> Cần mask Bool
         memory = self.sentence_encoder(sent_repr, sent_mask_bool)
 
-        # --- DECODER (Standard) ---
+        # --- DECODER: STANDARD ATTENTION CẦN MASK 2D & CAUSAL ---
         trg_input = trg[:, :-1]
         
-        # 1. Causal Mask (T, T) - Che tương lai
+        # 1. Causal Mask (T, T) - Float -inf
         tgt_causal_mask = create_causal_mask(trg_input.size(1), device)
         
-        # 2. Padding Mask (B, T) - Che token pad
+        # 2. Padding Mask (B, T) - Bool
         tgt_padding_mask = create_padding_mask(trg_input, self.vocab.pad_idx).to(device)
 
-        # Forward Decoder
         decoder_outs = self.decoder(trg_input, memory, tgt_causal_mask, tgt_padding_mask, sent_mask_bool)
         
         logits = self.fc_out(decoder_outs)
@@ -337,26 +333,29 @@ class EnhancedAttnTransformerModel(nn.Module):
         
         return logits, loss
 
+    @torch.no_grad()
     def predict(self, src, max_len=None):
         device = self.config.device
         B, S, W = src.size()
         max_len = max_len if max_len is not None else self.MAX_LENGTH
 
-        # 1. Encoder (Giống forward)
+        # 1. ENCODER (Logic y hệt forward)
         src_flat = src.view(B * S, W)
-        src_mask_flat = create_padding_mask(src_flat, self.vocab.pad_idx).to(device)
+        # SỬA LỖI QUAN TRỌNG: Ép kiểu mask thành 4D (B*S, 1, 1, W)
+        src_mask_flat = (src_flat != self.vocab.pad_idx).unsqueeze(1).unsqueeze(2)
+        
         encoder_outs_word, _ = self.word_encoder(src_flat, src_mask_flat)
         
         sent_repr = encoder_outs_word.view(B, S, W, -1).mean(dim=2)
         sent_repr = self.Sen_PE(sent_repr)
-        sent_mask = (src.sum(dim=-1) != self.vocab.pad_idx * W).float().to(device)
-        memory = self.sentence_encoder(sent_repr, (sent_mask == 0))
+        
+        sent_mask_bool = (src.sum(dim=-1) == self.vocab.pad_idx * W).to(device)
+        memory = self.sentence_encoder(sent_repr, sent_mask_bool)
 
-        # 2. Decode tự hồi quy
+        # 2. DECODER LOOP
         ys = torch.full((B, 1), self.vocab.bos_idx, dtype=torch.long, device=device)
 
         for i in range(max_len):
-            # Tạo mask cho bước hiện tại
             tgt_causal_mask = create_causal_mask(ys.size(1), device)
             tgt_padding_mask = create_padding_mask(ys, self.vocab.pad_idx).to(device)
 
@@ -375,18 +374,15 @@ class EnhancedAttnTransformerModel(nn.Module):
 
 def create_padding_mask(seq, pad_idx):
     """
-    Tạo mask cho key_padding_mask.
-    True tại vị trí Padding (để model bỏ qua).
+    Tạo mask cho key_padding_mask (True là Pad).
     Shape: (Batch_Size, Seq_Len)
     """
     return (seq == pad_idx)
 
 def create_causal_mask(seq_len, device):
     """
-    Tạo mask cho attn_mask.
-    Giá trị 0 tại vị trí được nhìn, -inf tại vị trí tương lai.
+    Tạo mask cho attn_mask (0 là nhìn, -inf là che).
     Shape: (Seq_Len, Seq_Len)
     """
-    # Tạo ma trận tam giác trên chứa -inf (không tính đường chéo chính)
     mask = torch.triu(torch.full((seq_len, seq_len), float('-inf'), device=device), diagonal=1)
     return mask
