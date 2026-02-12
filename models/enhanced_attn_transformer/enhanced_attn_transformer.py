@@ -224,7 +224,7 @@ class DecoderLayer(nn.Module):
         
         # Hack nhẹ: GroupAttention trong Decoder hơi rủi ro vì nó nhìn cả tương lai (neighbor phải).
         # Tuy nhiên, ta vẫn chạy để lấy group_prob, việc che tương lai sẽ do Self-Attention lo.
-        eos_mask = (x.sum(dim=-1) != 0) # Tạo mask tạm (B, T)
+        eos_mask = (x.sum(dim=-1) != 0).unsqueeze(1)
         group_prob, break_prob = self.group_attn(x, eos_mask, group_prob)
 
         # Bước 2: Self-Attention (ScaledDotProductAttention)
