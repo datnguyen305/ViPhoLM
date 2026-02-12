@@ -21,3 +21,4 @@ from .bottom_up.content_selector import ContentSelector
 from .lstm_phoneme.lstm_phoneme import LSTM_Model_Phoneme
 from .bilstm_phoneme.bilstm_phoneme import BiLSTM_Model_Phoneme
 from .viword_transformer.model import ViWordTransformerModel
+from .enhanced_attn_transformer.enhanced_attn_transformer import EnhancedAttnTransformerModel
