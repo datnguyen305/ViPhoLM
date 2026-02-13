@@ -175,7 +175,7 @@ class SublayerConnection(nn.Module):
 
 
 """
-In progress
+Oke
 """
 class EncoderLayer(nn.Module):
     def __init__(self, config, vocab: Hierarchy_Vocab):
@@ -197,10 +197,8 @@ class EncoderLayer(nn.Module):
 class DecoderLayer(nn.Module):
     def __init__(self, config, vocab):
         super().__init__()
-        # 1. Standard Self-Attention (Masked)
         self.self_attn = nn.MultiheadAttention(config.d_model, config.head, batch_first=True)
         
-        # 2. Standard Cross-Attention
         self.cross_attn = nn.MultiheadAttention(config.d_model, config.head, batch_first=True)
         
         self.feed_forward = PositionwiseFeedForward(config)
@@ -214,24 +212,17 @@ class DecoderLayer(nn.Module):
         memory_padding_mask: (Batch, Source_Len) - Mask che padding source (Bool True/False)
         """
         
-        # Sublayer 1: Masked Self-Attention
-        # attn_mask: Che tương lai
-        # key_padding_mask: Che vị trí <pad> trong câu đích
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, 
                                                          attn_mask=tgt_causal_mask,
                                                          key_padding_mask=tgt_padding_mask)[0])
         
-        # Sublayer 2: Cross-Attention
-        # key_padding_mask: Che vị trí <pad> của memory (Encoder output)
         x = self.sublayer[1](x, lambda x: self.cross_attn(query=x, 
                                                          key=memory, 
                                                          value=memory, 
                                                          key_padding_mask=memory_padding_mask)[0])
         
-        # Sublayer 3: Feed Forward
         x = self.sublayer[2](x, self.feed_forward)
         
-        # Không còn trả về group_prob hay break_prob nữa
         return x
 
 
@@ -273,7 +264,6 @@ class TransformerDecoderBlock(nn.Module):
         x = self.pos_embed(x)
         
         for layer in self.layers:
-            # Truyền đúng 5 tham số mask chuẩn
             x = layer(x, memory, tgt_causal_mask, tgt_padding_mask, memory_padding_mask)
             
         return self.norm(x)
@@ -302,10 +292,7 @@ class EnhancedAttnTransformerModel(nn.Module):
         B, S, W = src.size()
         device = src.device
 
-        # --- ENCODER: GROUP ATTENTION CẦN MASK 4D ---
         src_flat = src.view(B * S, W)
-        # SỬA: Tạo mask 4D thủ công (B*S, 1, 1, W) để khớp với GroupAttention
-        # Không dùng hàm create_padding_mask (vì hàm đó trả về 2D cho Decoder)
         src_mask_flat = (src_flat != self.vocab.pad_idx).unsqueeze(1).unsqueeze(2)
         
         encoder_outs_word, _ = self.word_encoder(src_flat, src_mask_flat)
@@ -313,17 +300,13 @@ class EnhancedAttnTransformerModel(nn.Module):
         sent_repr = encoder_outs_word.view(B, S, W, -1).mean(dim=2)
         sent_repr = self.Sen_PE(sent_repr)
         
-        # Mask cho Sentence Encoder (Standard -> Cần 2D Bool)
         sent_mask_bool = (src.sum(dim=-1) == self.vocab.pad_idx * W).to(device)
         memory = self.sentence_encoder(sent_repr, sent_mask_bool)
 
-        # --- DECODER: STANDARD ATTENTION CẦN MASK 2D & CAUSAL ---
         trg_input = trg[:, :-1]
         
-        # 1. Causal Mask (T, T) - Float -inf
         tgt_causal_mask = create_causal_mask(trg_input.size(1), device)
         
-        # 2. Padding Mask (B, T) - Bool
         tgt_padding_mask = create_padding_mask(trg_input, self.vocab.pad_idx).to(device)
 
         decoder_outs = self.decoder(trg_input, memory, tgt_causal_mask, tgt_padding_mask, sent_mask_bool)
@@ -339,9 +322,8 @@ class EnhancedAttnTransformerModel(nn.Module):
         B, S, W = src.size()
         max_len = max_len if max_len is not None else self.MAX_LENGTH
 
-        # 1. ENCODER (Logic y hệt forward)
         src_flat = src.view(B * S, W)
-        # SỬA LỖI QUAN TRỌNG: Ép kiểu mask thành 4D (B*S, 1, 1, W)
+
         src_mask_flat = (src_flat != self.vocab.pad_idx).unsqueeze(1).unsqueeze(2)
         
         encoder_outs_word, _ = self.word_encoder(src_flat, src_mask_flat)
@@ -352,7 +334,6 @@ class EnhancedAttnTransformerModel(nn.Module):
         sent_mask_bool = (src.sum(dim=-1) == self.vocab.pad_idx * W).to(device)
         memory = self.sentence_encoder(sent_repr, sent_mask_bool)
 
-        # 2. DECODER LOOP
         ys = torch.full((B, 1), self.vocab.bos_idx, dtype=torch.long, device=device)
 
         for i in range(max_len):
@@ -381,8 +362,9 @@ def create_padding_mask(seq, pad_idx):
 
 def create_causal_mask(seq_len, device):
     """
-    Tạo mask cho attn_mask (0 là nhìn, -inf là che).
-    Shape: (Seq_Len, Seq_Len)
+    Tạo mask Causal dạng Boolean để khớp với padding_mask.
+    Logic: True = Che (Ignore), False = Nhìn (Keep).
     """
-    mask = torch.triu(torch.full((seq_len, seq_len), float('-inf'), device=device), diagonal=1)
+    # Tạo ma trận True ở tam giác trên (vị trí tương lai cần che)
+    mask = torch.triu(torch.ones(seq_len, seq_len, dtype=torch.bool, device=device), diagonal=1)
     return mask
