@@ -21,7 +21,7 @@ dataset:
     type: TextSumDatasetViword
     path: datasets/Wikilingual-dataset/test.json
   batch_size: 16
-  num_workers: 4
+  num_workers: 8
 
 model:
   name: ViWordTransformer_Wikilingual
@@ -43,7 +43,7 @@ model:
     ffn_hidden: 2048
     drop_prob: 0.1
   label_smoothing: 0.1
-  device: cpu
+  device: cuda
 
 training:
   checkpoint_path: "checkpoints"

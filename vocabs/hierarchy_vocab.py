@@ -24,6 +24,28 @@ class Hierarchy_Vocab(Vocab):
         self.bos_idx = 1
         self.eos_idx = 2
         self.unk_idx = 3
+        
+        self.max_target_length = 0
+        
+        self.max_sentence_length = 0   # max token per sentence
+        self.max_sentences = 0   
+        
+    def analyze_document_structure(self, item):
+        paragraphs = item["source"]
+        num_sent = 0
+
+        for _, paragraph in paragraphs.items():
+            num_sent += len(paragraph)
+
+            for sent in paragraph:
+                tokens = preprocess_sentence(sent)
+                self.max_sentence_length = max(
+                    self.max_sentence_length,
+                    len(tokens) + 2  # BOS + EOS
+                )
+
+        self.max_sentences = max(self.max_sentences, num_sent)
+
     
     """
         Ready
@@ -38,6 +60,8 @@ class Hierarchy_Vocab(Vocab):
             for key in data:
                 item = data[key]
                 
+                self.analyze_document_structure(item)
+                
                 paragraphs = item["source"]
                 paragraphs = [" ".join(paragraph) for _, paragraph in paragraphs.items()]
                 source = "<nl>".join(paragraphs)  # new line mark
@@ -49,8 +73,8 @@ class Hierarchy_Vocab(Vocab):
                 target = preprocess_sentence(target)
                 counter.update(target)
                 
-                if self.max_sentence_length < len(target):
-                    self.max_sentence_length = len(target)
+                if self.max_target_length < len(target):
+                    self.max_target_length = len(target)
         
         min_freq = max(config.min_freq, 1)
         
@@ -114,6 +138,7 @@ class Hierarchy_Vocab(Vocab):
             else:
                 sentences.append(question.strip().split())
         return sentences
+
     
     def __eq__(self, other: "Vocab"):
         if self.stoi != other.stoi:
