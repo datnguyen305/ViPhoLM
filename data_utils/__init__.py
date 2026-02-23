@@ -130,8 +130,8 @@ def collate_fn_seneca(batch):
     }
 
 def collate_fn_hierarchy(items: List[Instance], pad_idx = 0) -> Instance:
-    MAX_SENTS = 30
-    MAX_WORDS = 50  
+    MAX_SENTS = 50
+    MAX_WORDS = 80  
 
     target_len = MAX_SENTS * MAX_WORDS
     ids = []
