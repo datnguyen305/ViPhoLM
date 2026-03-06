@@ -32,8 +32,19 @@ model:
   d_model: 512 
   device: cuda
   
-  encoder:
-    n_layers: 4
+  encoder_enhanced: 
+  n_layers: 6
+  n_head: 8
+  head: 8        
+  d_model: 512   
+  hidden_size: 512
+  ffn_hidden: 2048
+  drop_prob: 0.1
+  dropout: 0.1   
+  d_kv: 64 
+  
+  encoder_standard:
+    n_layers: 6
     n_head: 8
     head: 8        
     d_model: 512   
@@ -44,7 +55,7 @@ model:
     d_kv: 64       
 
   decoder:
-    n_layers: 4
+    n_layers: 6
     n_head: 8
     head: 8        
     d_model: 512
