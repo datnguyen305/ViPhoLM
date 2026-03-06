@@ -1,0 +1,67 @@
+vocab:
+  type: Hierarchy_Vocab
+  path:
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+  max_sentence_length: 60
+  max_sentences: 20
+
+dataset:
+  train: 
+    type: TextSumDatasetHierarchy
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDatasetHierarchy
+    path: datasets/Wikilingual-dataset/dev.json
+  test: 
+    type: TextSumDatasetHierarchy
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 32
+  num_workers: 16
+
+model:
+  name: EnhancedAttnTransformerModel_Wikilingual
+  architecture: EnhancedAttnTransformerModel
+  hidden_size: 512
+  d_model: 512 
+  device: cuda
+  
+  encoder:
+    n_layers: 4
+    n_head: 8
+    head: 8        
+    d_model: 512   
+    hidden_size: 512
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    dropout: 0.1   
+    d_kv: 64       
+
+  decoder:
+    n_layers: 4
+    n_head: 8
+    head: 8        
+    d_model: 512
+    hidden_size: 512
+    ffn_hidden: 2048
+    drop_prob: 0.1
+    dropout: 0.1
+    d_kv: 64       
+
+  label_smoothing: 0.1
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.15
+  lr_coverage: 0.15
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTaskHierarchy
