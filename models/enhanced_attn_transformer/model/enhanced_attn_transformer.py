@@ -16,8 +16,8 @@ class EnhancedAttnTransformerModel(nn.Module):
         self.MAX_LENGTH = vocab.max_sentence_length + 2
         self.config = config
 
-        self.word_encoder = TransformerEncoderBlock(config.encoder, vocab)
-        self.sentence_encoder = StandardTransformerEncoderBlock(config.encoder)
+        self.word_encoder = TransformerEncoderBlock(config.encoder_enhanced, vocab)
+        self.sentence_encoder = StandardTransformerEncoderBlock(config.encoder_standard)
         self.decoder = TransformerDecoderBlock(config.decoder, vocab)
         
         self.Word_PE = PositionalEncoding(self.d_model, max_len=5000)
