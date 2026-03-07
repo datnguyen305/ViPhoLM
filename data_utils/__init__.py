@@ -138,8 +138,8 @@ def collate_fn_hierarchy(items: List[Instance], pad_idx = 0) -> Instance:
 
     for instance in items:
         ids.append(instance.id)
-        labels_list.append(instance.label)
-        shifted_labels_list.append(instance.shifted_right_label)
+        labels_list.append(torch.tensor(instance.label, dtype=torch.long))
+        shifted_labels_list.append(torch.tensor(instance.shifted_right_label, dtype=torch.long))
         
         # instance.input_ids lúc này đã là Tensor (40, 40) từ encode_document
         input_ids_list.append(instance.input_ids)

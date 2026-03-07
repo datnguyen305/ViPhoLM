@@ -30,7 +30,7 @@ model:
   architecture: EnhancedAttnTransformerModel
   hidden_size: 512
   d_model: 512 
-  device: cuda
+  device: cpu
 
   encoder_enhanced: 
     n_layers: 6
