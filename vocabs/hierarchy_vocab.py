@@ -79,16 +79,29 @@ class Hierarchy_Vocab(Vocab):
     """
         Ready - hopefully
     """
-    def encode_document(self, document: List[str]) -> List[torch.Tensor]:
+    def encode_document(self, document: List[str], max_doc_len = 40, max_sent_len = 40) -> List[torch.Tensor]:
         """
         document: list of sentences (strings)
-        return: list of sentence tensors [(S1,), (S2,), ...]
+        return: A single 2D Tensor [max_doc_len, max_sent_len]
         """
         sentences = []
-        for sent in document:
-            sent_vec = self.encode_sentence(sent)
+        for i, sent in enumerate(document):
+            if i >= max_doc_len: 
+                break
+                
+            sent_vec = self.encode_sentence(sent) 
+            if len(sent_vec) < max_sent_len:
+                sent_vec += [self.pad_idx] * (max_sent_len - len(sent_vec))
+            else:
+                sent_vec = sent_vec[:max_sent_len]
+                
             sentences.append(sent_vec)
-        return sentences
+
+        while len(sentences) < max_doc_len:
+            empty_sentence = [self.pad_idx] * max_sent_len
+            sentences.append(empty_sentence)
+
+        return torch.tensor(sentences, dtype=torch.long)
     
     def encode_sentence(self, sentence: str) -> torch.Tensor:
         """Turn a sentence into a vector of indices"""
@@ -96,7 +109,7 @@ class Hierarchy_Vocab(Vocab):
         vec = [self.bos_idx] + [
             self.stoi.get(token, self.unk_idx) for token in sentence
         ] + [self.eos_idx]
-        vec = torch.tensor(vec, dtype=torch.long)
+        
         return vec
     
     def decode_sentence(self, sentence_vecs: torch.Tensor, join_words=True) -> List[str]:

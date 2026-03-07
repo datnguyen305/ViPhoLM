@@ -18,8 +18,8 @@ class TextSumDatasetHierarchy(Dataset):
         self._data = json.load(open(path,  encoding='utf-8'))
         self._keys = list(self._data.keys())
         self._vocab = vocab
-        self.MAX_SENTENCE_LENGTH = config.get("max_sentence_length", 50) 
-        self.MAX_SENTS = config.get("max_sentences", 10)
+        self.MAX_SENTENCE_LENGTH = config.get("max_sentence_length", 40) 
+        self.MAX_SENTS = config.get("max_sentences", 40)
         self.pad_idx = self._vocab.pad_idx
     def __len__(self) -> int:
         return len(self._data)
@@ -31,23 +31,14 @@ class TextSumDatasetHierarchy(Dataset):
         paragraphs = item["source"]
         document = [s for paragraph in paragraphs.values() for s in paragraph]
 
-        # 1. Mã hóa tài liệu
-        # Giả sử encode_document trả về list các Tensor 1D
-        sentence_tensors = self._vocab.encode_document(document)
-
-        # 2. Làm phẳng (Flatten) để collate_fn có thể thực hiện cat và pad
-        # Chúng ta nối các câu lại thành 1 chuỗi ID phẳng duy nhất
-        flat_input_ids = torch.cat(sentence_tensors) if len(sentence_tensors) > 0 else torch.tensor([], dtype=torch.long)
+        sentence_tensors = self._vocab.encode_document(document, max_doc_len = self.MAX_SENTS, max_sent_len = self.MAX_SENTENCE_LENGTH)
 
         target = item["target"]
         encoded_target = self._vocab.encode_sentence(target)
 
-        # TRẢ VỀ TÊN KHỚP VỚI COLLATE_FN
         return Instance(
             id=key,
-            input_ids=flat_input_ids,          # Dùng cho logic cat/pad trong collate
-            encoded_document=flat_input_ids,   # Thêm key này để tránh lỗi AttributeError
+            input_ids=sentence_tensors,
             label=encoded_target,
             shifted_right_label=encoded_target[1:],
-            pad_idx=self.pad_idx
         )
