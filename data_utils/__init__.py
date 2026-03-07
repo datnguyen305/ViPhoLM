@@ -130,45 +130,34 @@ def collate_fn_seneca(batch):
     }
 
 def collate_fn_hierarchy(items: List[Instance], pad_idx = 0) -> Instance:
-    MAX_SENTS = 50
-    MAX_WORDS = 80  
-
-    target_len = MAX_SENTS * MAX_WORDS
+    
     ids = []
     input_ids_list = []
     labels_list = []
     shifted_labels_list = []
-    encoded_document_lists = []
 
     for instance in items:
         ids.append(instance.id)
         labels_list.append(instance.label)
         shifted_labels_list.append(instance.shifted_right_label)
-        encoded_document_lists.append(instance.encoded_document)
+        
+        # instance.input_ids lúc này đã là Tensor (40, 40) từ encode_document
+        input_ids_list.append(instance.input_ids)
 
-        # Pad input_ids to target_len
-        curr_ids = instance.input_ids
-        if len(curr_ids) < target_len:
-            curr_ids = torch.cat([curr_ids, torch.full((target_len - len(curr_ids),), pad_idx)])
-        else:
-            curr_ids = curr_ids[:target_len]
-        input_ids_list.append(curr_ids)
+    # Gom nhóm các Tensor (40, 40) thành (Batch, 40, 40)
+    input_ids_padded = torch.stack(input_ids_list) 
 
-
-    input_ids_padded = torch.stack(input_ids_list)
-
+    # Padding cho nhãn (Labels thường là 1D, dùng pad_sequence là đúng)
     labels_padded = pad_sequence(
         labels_list, batch_first=True, padding_value=pad_idx
     )
     shifted_labels_padded = pad_sequence(
         shifted_labels_list, batch_first=True, padding_value=pad_idx
     )
-    
-    input_ids_padded = input_ids_padded.view(len(items), MAX_SENTS, MAX_WORDS)
 
     return Instance(
         id = ids,
-        input_ids = input_ids_padded,
+        input_ids = input_ids_padded, # Bây giờ đã là 3D: (Batch, 40, 40)
         label = labels_padded,
         shifted_right_label = shifted_labels_padded,
     )
