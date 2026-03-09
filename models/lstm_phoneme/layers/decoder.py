@@ -50,7 +50,7 @@ class Decoder(nn.Module):
         # decoder_memory: (num_layers, batch_size, hidden_size * 3)
 
         decoder_outputs = []
-        target_len = self.vocab.max_sentence_length
+        target_len = target_tensor.shape[1]
 
         for i in range(target_len):
             decoder_output, (decoder_hidden, decoder_memory) = self.forward_step(decoder_input, (decoder_hidden, decoder_memory))
