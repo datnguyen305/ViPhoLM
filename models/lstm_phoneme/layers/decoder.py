@@ -97,7 +97,7 @@ class Decoder(nn.Module):
         # outputs: (batch_size, 1, vocab_size) * 3
 
         batch_size = outputs
-        outputs = torch.stack(B, 1, self.vocab.vocab_size, -1)
+        outputs = torch.stack(outputs, -1)
         # outputs: (batch_size, 1, vocab_size, 3)
 
         return outputs, (hidden, memory)

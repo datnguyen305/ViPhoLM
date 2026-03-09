@@ -1,13 +1,13 @@
 vocab:
   type: ViWordVocab
   path:
-    train: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
-    dev: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
-    test: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
-  TRAIN: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
-  DEV: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
-  TEST: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
-  JSON_PATH: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+  TRAIN: datasets/Wikilingual-dataset/train.json
+  DEV: datasets/Wikilingual-dataset/dev.json
+  TEST: datasets/Wikilingual-dataset/test.json
+  JSON_PATH: datasets/Wikilingual-dataset/train.json
   TOKENIZER: null
   min_freq: 3
   bos_token: <bos>
@@ -18,15 +18,16 @@ vocab:
 dataset:
   train: 
     type: TextSumDatasetPhoneme
-    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+    path: datasets/Wikilingual-dataset/train.json
   dev:
     type: TextSumDatasetPhoneme
-    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
+    path: datasets/Wikilingual-dataset/dev.json
   test: 
     type: TextSumDatasetPhoneme
-    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
-  batch_size: 16
-  num_workers: 4
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 4
+  num_workers: 10
+  
 
 model:
   name: LSTM_Model_Phoneme_3layer_Wikilingual
@@ -45,7 +46,7 @@ model:
     bidirectional: False
     dropout: 0.1
   label_smoothing: 0.1
-  device: cuda
+  device: cpu
 
 training:
   checkpoint_path: "checkpoints"
