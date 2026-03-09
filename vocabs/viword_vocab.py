@@ -41,6 +41,10 @@ class ViWordVocab(Vocab):
         self.bos_idx = 1
         self.eos_idx = 2
         self.unk_idx = 3
+    
+    @property
+    def vocab_size(self) -> int:
+        return len(self.stoi)
 
     def make_vocab(self, config):
         # Lấy list đường dẫn từ config (Đã sửa ở bước trước)

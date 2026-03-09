@@ -14,9 +14,9 @@ class Encoder(nn.Module):
         ])
         self.lstm = nn.LSTM(
             config.hidden_size * self.num_features,
-            config.hidden_size * 4,
+            config.hidden_size * 3,
             bidirectional=False,
-            num_layers=config.layer_dim, 
+            num_layers=config.layer_dim, # 3 lstm
             batch_first=True, 
             dropout=config.dropout
         )
@@ -27,12 +27,12 @@ class Encoder(nn.Module):
         embeds = []
         for i in range(self.num_features):
             embeds.append(self.dropout(self.embedding[i](input[:, :, i])))
-            # embeds: (batch_size, seq_len, hidden_size) * 4
+            # embeds: (batch_size, seq_len, hidden_size) * 3
         embedded = torch.cat(embeds, dim=-1)
-        # embedded: (batch_size, seq_len, hidden_size * 4)
+        # embedded: (batch_size, seq_len, hidden_size * 3)
 
         output, state = self.lstm(embedded)
-        # output : (batch_size, seq_len, hidden_size)
-        # states: (h_n, c_n) final_hidden_state: (num_layers, batch_size, hidden_size * 4)
+        # output : (batch_size, seq_len, hidden_size * 3)
+        # states: (h_n, c_n) final_hidden_state: (num_layers, batch_size, hidden_size * 3)
 
         return output, state
