@@ -120,21 +120,21 @@ class ViWordVocab(Vocab):
         ]
         sentence = []
         for phonemes in syllables:
-            onset, medial, nucleus = phonemes
+            initial, rhyme, tone = phonemes
             # turn phoneme into None if they are in special tokens
-            onset = None if onset in self.specials else onset
-            medial = None if medial in self.specials else medial
-            nucleus = None if nucleus in self.specials else nucleus
-            word = compose_word(onset, medial, nucleus)
+            initial = '' if initial in self.specials else initial
+            rhyme = '' if rhyme in self.specials else rhyme
+            tone = '' if tone in self.specials else tone
+            word = compose_word(initial, rhyme, tone)
             
             if word:
                 sentence.append(word)
             else:
-                if onset == self.bos_token:
+                if initial == self.bos_token:
                     sentence.append(self.bos_token)
                     continue
                 
-                if onset == self.eos_token:
+                if initial == self.eos_token:
                     sentence.append(self.eos_token)
                     continue
                 
