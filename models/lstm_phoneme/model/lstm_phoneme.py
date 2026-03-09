@@ -16,6 +16,7 @@ class LSTM_Model_Phoneme(nn.Module):
         self.MAX_LENGTH = vocab.max_sentence_length + 2 # + 2 for bos and eos tokens
         self.d_model = config.d_model
         self.num_features = 3
+        self.config = config
 
         self.encoder = Encoder(config.encoder, vocab)
         self.decoder = Decoder(config.decoder, vocab)
