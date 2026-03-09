@@ -79,7 +79,7 @@ class LSTM_Model_Phoneme(nn.Module):
             outputs.append(decoder_input)
             # outputs: (batch_size, 1, 3) * seq_length
 
-            if decoder_input.shape[:, :, 0] == self.vocab.eos_idx:
+            if decoder_input[:, :, 0] == self.vocab.eos_idx:
                 break
         
         outputs = torch.cat(outputs, dim=1)
