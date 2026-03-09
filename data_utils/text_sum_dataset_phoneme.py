@@ -24,7 +24,6 @@ class TextSumDatasetPhoneme(Dataset):
         key = self._keys[index]
         item = self._data[key]
         
-        # --- 1. Xử lý Source ---
         raw_source = item["source"]
         paragraphs = [" ".join(paragraph) for _, paragraph in raw_source.items()]
         source_str = " <nl> ".join(paragraphs) 
@@ -32,11 +31,9 @@ class TextSumDatasetPhoneme(Dataset):
         source_tokens = preprocess_sentence(source_str)
         encoded_source = self._vocab.encode_caption(source_tokens)
 
-        # --- 2. Xử lý Target ---
         target_str = item["target"]
         target_tokens = preprocess_sentence(target_str)
         
-        # encoded_target sẽ có dạng: [BOS, w1, w2, ..., EOS]
         encoded_target = self._vocab.encode_caption(target_tokens)
 
         shifted_right_label = encoded_target[1:]

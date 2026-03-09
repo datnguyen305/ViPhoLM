@@ -6,7 +6,7 @@ from typing import List
 from builders.vocab_builder import META_VOCAB
 from vocabs.vocab import Vocab
 from vocabs.utils import preprocess_sentence
-from vocabs.Vietnamese_utils import analyze_Vietnamese, compose_word
+from vocabs.Vietnamese_utils import analyse_Vietnamese, compose_word
 from typing import *
 
 @META_VOCAB.register()
@@ -74,7 +74,7 @@ class ViWordVocab(Vocab):
                 words = preprocess_sentence(full_text)
                 
                 for word in words:
-                    components = analyze_Vietnamese(word)
+                    components = analyse_Vietnamese(word)
                     if components:
                         phonemes.update([phoneme for phoneme in components if phoneme])
 
@@ -85,21 +85,21 @@ class ViWordVocab(Vocab):
 
     def encode_caption(self, caption: List[str]) -> torch.Tensor:
         syllables = [
-            (self.bos_idx, self.pad_idx, self.pad_idx, self.pad_idx)
+            (self.bos_idx, self.pad_idx, self.pad_idx)
         ]
         for word in caption:
-            components = analyze_Vietnamese(word)
+            components = analyse_Vietnamese(word)
             if components:
                 syllables.append([
                     self.stoi[phoneme] if phoneme else self.pad_idx for phoneme in components
                 ])
             else:
                 syllables.append(
-                    (self.unk_idx, self.pad_idx, self.pad_idx, self.pad_idx)
+                    (self.unk_idx, self.pad_idx, self.pad_idx)
                 )
 
         syllables.append(
-            (self.eos_idx, self.pad_idx, self.pad_idx, self.pad_idx)
+            (self.eos_idx, self.pad_idx, self.pad_idx)
         )
 
         vec = torch.tensor(syllables).long()
@@ -116,13 +116,13 @@ class ViWordVocab(Vocab):
         ]
         sentence = []
         for phonemes in syllables:
-            onset, medial, nucleus, coda = phonemes
+            onset, medial, nucleus = phonemes
             # turn phoneme into None if they are in special tokens
             onset = None if onset in self.specials else onset
             medial = None if medial in self.specials else medial
             nucleus = None if nucleus in self.specials else nucleus
-            coda = None if coda in self.specials else coda
-            word = compose_word(onset, medial, nucleus, coda)
+            word = compose_word(onset, medial, nucleus)
+            
             if word:
                 sentence.append(word)
             else:

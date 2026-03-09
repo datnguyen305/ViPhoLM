@@ -36,14 +36,14 @@ class TextSumTaskPhoneme(BaseTask):
         )
         self.dev_dataloader = DataLoader(
             dataset=self.dev_dataset,
-            batch_size=1, # Giữ batch=1 theo ý bạn
+            batch_size=1, 
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn
         )
         self.test_dataloader = DataLoader(
             dataset=self.test_dataset,
-            batch_size=1, # Giữ batch=1 theo ý bạn
+            batch_size=1,
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn
@@ -62,8 +62,6 @@ class TextSumTaskPhoneme(BaseTask):
                 items = items.to(self.device)
                 input_ids = items.input_ids
         
-                # --- QUAN TRỌNG: SỬA LABEL ---
-                # Dùng label gốc (có BOS và EOS). Model sẽ tự cắt để làm input và target.
                 labels = items.label 
                 
                 # Forward
@@ -91,19 +89,17 @@ class TextSumTaskPhoneme(BaseTask):
                 input_ids = items.input_ids
                 label = items.label
                 with torch.no_grad():
-                    # Predict: [Batch, Seq, 4]
+
                     prediction = self.model.predict(input_ids)
                     prediction = self.vocab.decode_batch_caption(prediction, join_words=True)
                     label = self.vocab.decode_batch_caption(items.label, join_words=True)
 
-                    # Lưu kết quả
                     id = items.id[0]
                     gens[id] = prediction[0]
                     gts[id] = label[0]
 
                 pbar.update()
-        
-        # Calculate metrics (ROUGE, BLEU, etc.)
+
         self.logger.info("Getting scores")
         scores = evaluation.compute_scores(gts, gens)
     
