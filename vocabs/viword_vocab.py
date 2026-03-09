@@ -122,9 +122,9 @@ class ViWordVocab(Vocab):
         for phonemes in syllables:
             initial, rhyme, tone = phonemes
             # turn phoneme into None if they are in special tokens
-            initial = '' if initial in self.specials else initial
-            rhyme = '' if rhyme in self.specials else rhyme
-            tone = '' if tone in self.specials else tone
+            initial = None if initial in self.specials else initial
+            rhyme = None if rhyme in self.specials else rhyme
+            tone = None if tone in self.specials else tone
             word = compose_word(initial, rhyme, tone)
             
             if word:
