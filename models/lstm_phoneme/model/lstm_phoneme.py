@@ -67,7 +67,7 @@ class LSTM_Model_Phoneme(nn.Module):
 
         for i in range(target_len):
             decoder_output, (decoder_hidden, decoder_memory) = self.forward_step(decoder_input, (decoder_hidden, decoder_memory))
-            # decoder_output: (batch_size, 1, vocab_size) * 3
+            # decoder_output: (batch_size, 1, vocab_size, 3)
 
             decoder_output.reshape(batch_size, 1, self.vocab.vocab_size, -1)
             # decoder_output: (batch_size, 1, vocab_size, 3)

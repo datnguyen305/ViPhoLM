@@ -54,7 +54,7 @@ class Decoder(nn.Module):
 
         for i in range(target_len):
             decoder_output, (decoder_hidden, decoder_memory) = self.forward_step(decoder_input, (decoder_hidden, decoder_memory))
-            # decoder_output: (batch_size, 1, vocab_size) * 3
+            # decoder_output: (batch_size, 1, vocab_size, 3)
 
             decoder_output.reshape(batch_size, 1, -1)
             # decoder_output: (batch_size, 1, vocab_size * 3)
@@ -95,5 +95,9 @@ class Decoder(nn.Module):
         for i in range(self.num_features):
             outputs.append(self.outs[i](ff_outputs[i]))
         # outputs: (batch_size, 1, vocab_size) * 3
+
+        batch_size = outputs
+        outputs = torch.stack(B, 1, self.vocab.vocab_size, -1)
+        # outputs: (batch_size, 1, vocab_size, 3)
 
         return outputs, (hidden, memory)
