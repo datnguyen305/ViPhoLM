@@ -113,38 +113,56 @@ class ViWordVocab(Vocab):
     def decode_caption(self, caption_vec: torch.Tensor, join_words=True):
         assert caption_vec.dim() == 2
         syllable_ids = caption_vec.tolist()
+        
+        # Sử dụng .get() để tránh lỗi KeyError nếu model dự đoán index lạ
         syllables = [
-            (
-                self.itos[phoneme_idx] for phoneme_idx in phoneme_ids
-            ) for phoneme_ids in syllable_ids
+            [self.itos.get(idx, self.unk_token) for idx in phoneme_ids]
+            for phoneme_ids in syllable_ids
         ]
+        
         sentence = []
         for phonemes in syllables:
+            # Giải nén 3 thành phần
             initial, rhyme, tone = phonemes
-            # turn phoneme into None if they are in special tokens
-            initial = None if initial in self.specials else initial
-            rhyme = None if rhyme in self.specials else rhyme
-            tone = None if tone in self.specials else tone
-            word = compose_word(initial, rhyme, tone)
             
-            if word:
-                sentence.append(word)
-            else:
+            # 1. Kiểm tra Token đặc biệt (Thoát sớm để an toàn)
+            if initial in self.specials:
                 if initial == self.bos_token:
                     sentence.append(self.bos_token)
-                    continue
-                
-                if initial == self.eos_token:
+                elif initial == self.eos_token:
                     sentence.append(self.eos_token)
-                    continue
+                # Bỏ qua <pad> và các token khác, không gọi compose_word
+                continue
+
+            # 2. Chuẩn bị dữ liệu cho compose_word
+            # 'initial' giữ nguyên (hoặc None nếu bạn muốn khớp chính xác dict)
+            # 'rhyme' không được là None để tránh lỗi .startswith() trong utils
+            # 'tone' phải là '-' nếu model dự đoán ra token đặc biệt ở vị trí tone
+            
+            clean_initial = initial
+            clean_rhyme = '' if rhyme in self.specials else rhyme
+            clean_tone = '-' if tone in self.specials else tone
+            
+            try:
+                # Gọi hàm ghép từ
+                word = compose_word(clean_initial, clean_rhyme, clean_tone)
                 
+                if word:
+                    sentence.append(word)
+                else:
+                    # Nếu compose_word trả về None hoặc rỗng (do sai luật ngữ pháp)
+                    sentence.append(self.unk_token)
+            except Exception as e:
+                # Phòng hờ trường hợp utils vẫn crash do logic bên trong
                 sentence.append(self.unk_token)
 
-        # remove the <bos> and <eos> token
-        if sentence[0] == self.bos_token:
-            sentence = sentence[1:]
-        if sentence[-1] == self.eos_token:
-            sentence = sentence[:-1]
+        # 3. Hậu xử lý: Xóa <bos> và <eos> ở đầu/cuối câu
+        if len(sentence) > 0:
+            if sentence[0] == self.bos_token:
+                sentence = sentence[1:]
+        if len(sentence) > 0:
+            if sentence[-1] == self.eos_token:
+                sentence = sentence[:-1]
 
         if join_words:
             return " ".join(sentence)
