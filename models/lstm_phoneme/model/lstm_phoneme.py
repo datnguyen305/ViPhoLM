@@ -35,10 +35,12 @@ class LSTM_Model_Phoneme(nn.Module):
         loss_result = []
 
         for i in range(self.num_features):
-            loss_result.append(self.losses[i]\
-                    (outs[:, :, :, i].reshape(-1, self.vocab.vocab_size)), \
+            loss_result.append(
+                self.losses[i](
+                    outs[:, :, :, i].reshape(-1, self.vocab.vocab_size), 
                     labels[:, :, i].reshape(-1)
                 )
+            )
         # loss_result: (int)
         total_loss = 0 
         total_loss = sum(loss_result)
