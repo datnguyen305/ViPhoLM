@@ -26,16 +26,13 @@ class ViWordVocab(Vocab):
             tok: i for i, tok in enumerate(self.specials + phonemes)
         }
 
-        # only padding token is not allowed to be shown
-        self.specials = [self.padding_token]
-
     def initialize_special_tokens(self, config) -> None:
-        self.padding_token = config.pad_token
+        self.pad_token = config.pad_token
         self.bos_token = config.bos_token
         self.eos_token = config.eos_token
         self.unk_token = config.unk_token
         
-        self.specials = [self.padding_token, self.bos_token, self.eos_token, self.unk_token]
+        self.specials = [self.pad_token, self.bos_token, self.eos_token, self.unk_token]
 
         self.pad_idx = 0
         self.bos_idx = 1
@@ -114,55 +111,47 @@ class ViWordVocab(Vocab):
         assert caption_vec.dim() == 2
         syllable_ids = caption_vec.tolist()
         
-        # Sử dụng .get() để tránh lỗi KeyError nếu model dự đoán index lạ
         syllables = [
-            [self.itos.get(idx, self.unk_token) for idx in phoneme_ids]
+            [self.itos[idx] for idx in phoneme_ids]
             for phoneme_ids in syllable_ids
         ]
         
         sentence = []
         for phonemes in syllables:
-            # Giải nén 3 thành phần
             initial, rhyme, tone = phonemes
-            
-            # 1. Kiểm tra Token đặc biệt (Thoát sớm để an toàn)
+
+            # Check initial có phải là special_token(bos, eos) không
             if initial in self.specials:
                 if initial == self.bos_token:
                     sentence.append(self.bos_token)
                 elif initial == self.eos_token:
                     sentence.append(self.eos_token)
-                # Bỏ qua <pad> và các token khác, không gọi compose_word
                 continue
-
-            # 2. Chuẩn bị dữ liệu cho compose_word
-            # 'initial' giữ nguyên (hoặc None nếu bạn muốn khớp chính xác dict)
-            # 'rhyme' không được là None để tránh lỗi .startswith() trong utils
-            # 'tone' phải là '-' nếu model dự đoán ra token đặc biệt ở vị trí tone
             
+            # Check phonemes phù hợp cho hàm compose_word
             clean_initial = initial
             clean_rhyme = '' if rhyme in self.specials else rhyme
             clean_tone = '-' if tone in self.specials else tone
             
             try:
-                # Gọi hàm ghép từ
                 word = compose_word(clean_initial, clean_rhyme, clean_tone)
-                
                 if word:
                     sentence.append(word)
                 else:
-                    # Nếu compose_word trả về None hoặc rỗng (do sai luật ngữ pháp)
                     sentence.append(self.unk_token)
             except Exception as e:
-                # Phòng hờ trường hợp utils vẫn crash do logic bên trong
                 sentence.append(self.unk_token)
 
-        # 3. Hậu xử lý: Xóa <bos> và <eos> ở đầu/cuối câu
+        # Bỏ bos_token, eos_token
         if len(sentence) > 0:
             if sentence[0] == self.bos_token:
                 sentence = sentence[1:]
         if len(sentence) > 0:
             if sentence[-1] == self.eos_token:
                 sentence = sentence[:-1]
+
+        # Bỏ qua các unk_token
+        sentence = [word for word in sentence if word != self.unk_token]
 
         if join_words:
             return " ".join(sentence)
