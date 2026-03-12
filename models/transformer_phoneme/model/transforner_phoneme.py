@@ -31,7 +31,7 @@ class TransformerPhoneme(nn.Module):
         self.encoder = TransformerEncoderBlock(config, self.vocab)
 
         # Decoder  
-        self.embedding 
+        self.tgt_embedding = clones(nn.Embedding(vocab.vocab_size, config.d_model), self.num_features)
         self.decoder = TransformerDecoderBlock(config, self.vocab)
         self.phoneme_ff = clones(FeedForward(config), self.num_features)
         self.outs = clones(nn.Linear(config.d_model, vocab.vocab_size), self.num_features)
@@ -69,12 +69,28 @@ class TransformerPhoneme(nn.Module):
         memory = self.encoder(x, encoder_padding_mask) 
         # memory: (B, S, d_model)
 
+
         # Decoder
-        B, S, W = trg.shape
-        decoder_padding_mask = create_padding_mask(trg, 3)
+        B, S, W = decoder_input.shape
+        decoder_padding_mask = create_padding_mask(decoder_input, 3)
         decoder_causal_mask = create_causal_mask(S)
 
-        x = self.decoder(trg, memory, decoder_causal_mask, \
+        # decoder_input: (B, S, 3)
+        embeds = []
+        for i in range(self.num_features):
+            embeds.append(self.dropout(self.src_embedding[i](decoder_input[:, :, i])))
+        # embeds: (B, S, d_model) * 3 
+        x = torch.cat(embeds, -1)
+        # embeds: (B, S, d_model * 3)
+        # x: (B, S, d_model * 3)
+        x = self.linear(x)
+        # x: (B, S, d_model)
+         
+        # Positional Encoding
+        x = self.PE(x)
+        # x: (B, S, d_model)
+
+        x = self.decoder(x, memory, decoder_causal_mask, \
                          decoder_padding_mask, encoder_padding_mask)
         
         ff_out = []
