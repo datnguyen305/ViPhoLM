@@ -170,7 +170,7 @@ class TransformerPhoneme(nn.Module):
 
             x = self.decoder(x, memory, trg_causal_mask, \
                          trg_mask, encoder_padding_mask)
-        
+            ff_out = []
             for i in range(self.num_features):
                 ff_out.append(self.phoneme_ff[i](x))
                 # ff_out: (B, S, d_model) * 3 
