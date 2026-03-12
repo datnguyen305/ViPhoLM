@@ -127,6 +127,7 @@ class TransformerPhoneme(nn.Module):
     
     def predict(self, src):
         # src: (B, S, 3)
+        src = src[:, :self.config.max_len]
         B, S, W = src.shape 
         B = src.size(0)
         encoder_padding_mask = create_padding_mask(src, 3)
@@ -134,7 +135,7 @@ class TransformerPhoneme(nn.Module):
         # embedding
         embeds = []
         for i in range(self.num_features):
-            embeds.append(self.dropout(self.src_embedding[i](decoder_input[:, :, i])))
+            embeds.append(self.dropout(self.src_embedding[i](src[:, :, i])))
         x = torch.cat(embeds, -1)
         x = self.linear(x)
         # x: (B, S, hidden_size)
@@ -157,7 +158,7 @@ class TransformerPhoneme(nn.Module):
             # embedding
             embeds = []
             for i in range(self.num_features):
-                embeds.append(self.dropout(self.src_embedding[i](decoder_input[:, :, i])))
+                embeds.append(self.dropout(self.tgt_embedding[i](decoder_input[:, :, i])))
             x = torch.cat(embeds, -1)
             x = self.linear(x)
             # x: (B, S, hidden_size)
