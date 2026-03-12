@@ -23,11 +23,11 @@ dataset:
     type: TextSumDatasetPhoneme
     path: datasets/Wikilingual-dataset/test.json
   batch_size: 16
-  num_workers: 4
+  num_workers: 10
 
 model:
   name: Transformer_Phoneme_Wikilingual
-  architecture: Transformer_Phoneme_Model 
+  architecture: TransformerPhoneme 
   d_model: 512
   n_layers: 6
   head: 8
@@ -35,7 +35,7 @@ model:
   ffn_hidden: 2048
   drop_prob: 0.1
   d_kv: 64
-  
+
 
 training:
   checkpoint_path: "checkpoints"
