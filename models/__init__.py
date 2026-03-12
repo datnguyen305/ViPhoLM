@@ -16,7 +16,8 @@ from .hepos.hepos import HeposLongformerSummarizer
 from .seneca.seneca import SENECA_Baseline
 from .longformer.longformer_encoder_decoder import LongformerEncoderDecoderModel
 # from .bottom_up.model import BottomUpSummarizer
-from .transformer_phoneme.testing import Testing
+# from .transformer_phoneme.testing import Testing
 from .bottom_up.content_selector import ContentSelector
 from .lstm_phoneme.model.lstm_phoneme import LSTM_Model_Phoneme
 from .bilstm_phoneme.bilstm_phoneme import BiLSTM_Model_Phoneme
+from .transformer_phoneme.model.transforner_phoneme import TransformerPhoneme

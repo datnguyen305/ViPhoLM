@@ -1,10 +1,9 @@
-from torch import nn
-from torch.nn import functional as F
-import torch
+from torch import nn 
+import torch 
 
-class FeedForwardNetwork(nn.Module):
+class PositionwiseFeedForward(nn.Module):
     def __init__(self, config):
-        super().__init__() 
+        super().__init__()
         self.linear1 = nn.Linear(config.hidden_size, config.ffn_hidden)
         self.linear2 = nn.Linear(config.ffn_hidden, config.hidden_size)
         self.dropout = nn.Dropout(config.drop_prob)
