@@ -73,7 +73,7 @@ class TransformerPhoneme(nn.Module):
         # Decoder
         B, S, W = decoder_input.shape
         decoder_padding_mask = create_padding_mask(decoder_input, 3)
-        decoder_causal_mask = create_causal_mask(S)
+        decoder_causal_mask = create_causal_mask(S, self.config.device)
 
         # decoder_input: (B, S, 3)
         embeds = []
