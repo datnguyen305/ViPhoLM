@@ -20,7 +20,7 @@ class TransformerPhoneme(nn.Module):
         self.config = config
 
         # Positional Encoding
-        self.PE = PositionalEncoding(self.d_model, max_len=5000)
+        self.PE = PositionalEncoding(self.d_model, max_len=2000)
 
         # Encoder 
         self.num_features = 3 
@@ -122,26 +122,28 @@ class TransformerPhoneme(nn.Module):
 
         return 0, total_loss 
     
-    # def predict(self, src):
-    #     pass
-    #     # src: (B, S, 3)
-    #     B, S, W = src.shape 
-    #     B = src.size(0)
-    #     encoder_padding_mask = create_padding_mask(src, 3)
+    def predict(self, src):
+        # src: (B, S, 3)
+        B, S, W = src.shape 
+        B = src.size(0)
+        encoder_padding_mask = create_padding_mask(src, 3)
 
-    #     # embedding
-    #     embeds = []
-    #     for i in range(self.num_features):
-    #         embeds.append(self.dropout(self.src_embedding))
-    #     x = torch.cat(embeds, -1)
-    #     x = self.linear(x)
-    #     # x: (B, S, hidden_size)
-    #     x = self.PE(x)
-    #     memory = self.encoder(x, encoder_padding_mask)
+        # embedding
+        embeds = []
+        for i in range(self.num_features):
+            embeds.append(self.dropout(self.src_embedding))
+        x = torch.cat(embeds, -1)
+        x = self.linear(x)
+        # x: (B, S, hidden_size)
+        x = self.PE(x)
+        memory = self.encoder(x, encoder_padding_mask)
 
-    #     # Decoder 
-    #     for i in range(self.MAX_LENGTH): 
-    #         pass 
+        # Decoder 
+
+
+
+        for i in range(self.MAX_LENGTH): 
+            pass 
 
 
 
