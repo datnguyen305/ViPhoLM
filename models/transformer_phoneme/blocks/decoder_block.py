@@ -11,6 +11,6 @@ class TransformerDecoderBlock(nn.Module):
 
     def forward(self, trg, memory, tgt_causal_mask, tgt_padding_mask, memory_padding_mask):
         for layer in self.layers:
-            x = layer(x, memory, tgt_causal_mask, tgt_padding_mask, memory_padding_mask)
+            x = layer(trg, memory, tgt_causal_mask, tgt_padding_mask, memory_padding_mask)
             
         return self.norm(x)

@@ -127,7 +127,7 @@ class TransformerPhoneme(nn.Module):
         # src: (B, S, 3)
         B, S, W = src.shape 
         B = src.size(0)
-        src_
+        decoder_padding_mask = create_padding_mask(src)
 
 
 
