@@ -125,8 +125,9 @@ class TransformerPhoneme(nn.Module):
     def predict(self, src):
         pass
         # src: (B, S, 3)
-        max_len = self.MAX_LENGTH
         B, S, W = src.shape 
+        B = src.size(0)
+        src_
 
 
 
