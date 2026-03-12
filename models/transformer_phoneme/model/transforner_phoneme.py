@@ -134,7 +134,7 @@ class TransformerPhoneme(nn.Module):
         # embedding
         embeds = []
         for i in range(self.num_features):
-            embeds.append(self.dropout(self.src_embedding))
+            embeds.append(self.dropout(self.src_embedding[i](decoder_input[:, :, i])))
         x = torch.cat(embeds, -1)
         x = self.linear(x)
         # x: (B, S, hidden_size)
@@ -157,7 +157,7 @@ class TransformerPhoneme(nn.Module):
             # embedding
             embeds = []
             for i in range(self.num_features):
-                embeds.append(self.dropout(self.src_embedding))
+                embeds.append(self.dropout(self.src_embedding[i](decoder_input[:, :, i])))
             x = torch.cat(embeds, -1)
             x = self.linear(x)
             # x: (B, S, hidden_size)
