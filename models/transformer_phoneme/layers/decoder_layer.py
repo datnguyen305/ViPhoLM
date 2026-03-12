@@ -45,6 +45,6 @@ class DecoderLayer(nn.Module):
                                                          value=memory, 
                                                          key_padding_mask=memory_padding_mask)[0])
         
-        x = self.sublayer[2](x, self.feed_forward(x))
+        x = self.sublayer[2](x, self.feed_forward)
         
         return x
