@@ -125,42 +125,42 @@ class TransformerPhoneme(nn.Module):
 
         return 0, total_loss 
     
-    def predict(self, src):
-        # src: (B, S, 3)
-        B, S, W = src.shape 
-        B = src.size(0)
-        encoder_padding_mask = create_padding_mask(src, 3)
+    # def predict(self, src):
+    #     # src: (B, S, 3)
+    #     B, S, W = src.shape 
+    #     B = src.size(0)
+    #     encoder_padding_mask = create_padding_mask(src, 3)
 
-        # embedding
-        embeds = []
-        for i in range(self.num_features):
-            embeds.append(self.dropout(self.src_embedding))
-        x = torch.cat(embeds, -1)
-        x = self.linear(x)
-        # x: (B, S, hidden_size)
-        x = self.PE(x)
-        memory = self.encoder(x, encoder_padding_mask)
+    #     # embedding
+    #     embeds = []
+    #     for i in range(self.num_features):
+    #         embeds.append(self.dropout(self.src_embedding))
+    #     x = torch.cat(embeds, -1)
+    #     x = self.linear(x)
+    #     # x: (B, S, hidden_size)
+    #     x = self.PE(x)
+    #     memory = self.encoder(x, encoder_padding_mask)
 
-        # Decoder initialize 
-        # Initiate decoder's input [<BOS>, <PAD>, <PAD>]
-        decoder_input = torch.empty(B, 1, self.num_features, dtype=torch.long, device=self.config.device)
-        for i in range(self.num_features):
-            if i == 0: 
-                decoder_input[:, :, i].fill_(self.vocab.bos_idx)
-            else: 
-                decoder_input[:, :, i].fill_(self.vocab.pad_idx)
-        # decoder_input: (batch_size, 1, 3)
+    #     # Decoder initialize 
+    #     # Initiate decoder's input [<BOS>, <PAD>, <PAD>]
+    #     decoder_input = torch.empty(B, 1, self.num_features, dtype=torch.long, device=self.config.device)
+    #     for i in range(self.num_features):
+    #         if i == 0: 
+    #             decoder_input[:, :, i].fill_(self.vocab.bos_idx)
+    #         else: 
+    #             decoder_input[:, :, i].fill_(self.vocab.pad_idx)
+    #     # decoder_input: (batch_size, 1, 3)
 
-        # Decoder running 
-        for _ in range(self.MAX_LENGTH): 
-            # embedding
-            embeds = []
-            for i in range(self.num_features):
-                embeds.append(self.dropout(self.src_embedding))
-            x = torch.cat(embeds, -1)
-            x = self.linear(x)
-            # x: (B, S, hidden_size)
-            x = self.PE(x)
+    #     # Decoder running 
+    #     for _ in range(self.MAX_LENGTH): 
+    #         # embedding
+    #         embeds = []
+    #         for i in range(self.num_features):
+    #             embeds.append(self.dropout(self.src_embedding))
+    #         x = torch.cat(embeds, -1)
+    #         x = self.linear(x)
+    #         # x: (B, S, hidden_size)
+    #         x = self.PE(x)
             
 
 
