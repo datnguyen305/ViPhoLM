@@ -154,7 +154,7 @@ class TransformerPhoneme(nn.Module):
 
         # Decoder running 
         outputs = []
-        for _ in range(self.MAX_LENGTH): 
+        for _ in range(self.config.max_len): 
             # embedding
             embeds = []
             for i in range(self.num_features):
