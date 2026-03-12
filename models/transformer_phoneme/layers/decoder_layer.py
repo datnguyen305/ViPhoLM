@@ -13,7 +13,7 @@ class DecoderLayer(nn.Module):
         self.feed_forward = PositionwiseFeedForward(config)
         self.sublayer = clones(SublayerConnection(config), 3)
 
-        self.embedding = clones(nn.Embedding(vocab.vocab_size, config.d_model))
+        self.embedding = clones(nn.Embedding(vocab.vocab_size, config.d_model), self.num_features)
         self.linear = nn.Linear(config.d_model * 3, config.d_model)
         self.dropout = nn.Dropout(0.1)
 
