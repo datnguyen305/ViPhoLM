@@ -20,7 +20,7 @@ class TransformerPhoneme(nn.Module):
         self.config = config
 
         # Positional Encoding
-        self.PE = PositionalEncoding(self.d_model, max_len=config.max_len)
+        self.PE = PositionalEncoding(self.d_model, max_len=self.config.max_len)
 
         # Encoder 
         self.num_features = 3 
