@@ -20,7 +20,7 @@ class TransformerPhoneme(nn.Module):
         self.config = config
 
         # Positional Encoding
-        self.PE = PositionalEncoding(self.d_model, max_len=self.config.max_len)
+        self.PE = PositionalEncoding(self.d_model, max_len=self.config.max_len + 10)
 
         # Encoder 
         self.num_features = 3 
@@ -170,6 +170,7 @@ class TransformerPhoneme(nn.Module):
 
             x = self.decoder(x, memory, trg_causal_mask, \
                          trg_mask, encoder_padding_mask)
+            x = x[:, -1:, :]
             ff_out = []
             for i in range(self.num_features):
                 ff_out.append(self.phoneme_ff[i](x))
