@@ -43,8 +43,8 @@ model:
 training:
   checkpoint_path: "checkpoints"
   learning_rate: 1 
-  lr_coverage: 0.15
-  warmup: 4000
+  lr_coverage: 2
+  warmup: 8000
   patience: 5
   score: rouge-L
 
