@@ -127,7 +127,13 @@ class TransformerPhoneme(nn.Module):
         # src: (B, S, 3)
         B, S, W = src.shape 
         B = src.size(0)
-        decoder_padding_mask = create_padding_mask(src)
+        decoder_padding_mask = create_padding_mask(src, 3)
+        decoder_causal_mask = create_causal_mask(src, self.config.device)
+
+        # embedding
+        embeds = []
+        for i in range(self.num_features):
+            embeds.append(self.dropout(self.src_embedding))
 
 
 

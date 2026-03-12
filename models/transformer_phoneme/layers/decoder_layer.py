@@ -25,16 +25,6 @@ class DecoderLayer(nn.Module):
         tgt_padding_mask: (Batch, Seq_Len) - Mask che padding target (Bool True/False)
         memory_padding_mask: (Batch, Source_Len) - Mask che padding source (Bool True/False)
         """
-
-        # x: (B, S, d_model * 3)
-        embeds = []
-        for i in range(self.num_features):
-            embeds.append(self.dropout(self.embedding[i](x[:, :, i])))
-        # embeds: (B, S, d__model) * 3
-        embeds = torch.cat(embeds, dim = -1) 
-        # embeds: (B, S, d_model * 3)
-        x = self.linear(embeds)
-        # x: (B, S, d_model)
         
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, 
                                                          attn_mask=tgt_causal_mask,
