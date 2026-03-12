@@ -120,20 +120,26 @@ class TransformerPhoneme(nn.Module):
         # loss_result: List [loss_initial, loss_rhyme, loss_tone]
         total_loss = sum(loss_result)
 
-        return total_loss 
+        return loss_result, total_loss 
     
     def predict(self, src):
         pass
         # src: (B, S, 3)
         B, S, W = src.shape 
         B = src.size(0)
-        decoder_padding_mask = create_padding_mask(src, 3)
-        decoder_causal_mask = create_causal_mask(src, self.config.device)
+        encoder_padding_mask = create_padding_mask(src, 3)
 
         # embedding
         embeds = []
         for i in range(self.num_features):
             embeds.append(self.dropout(self.src_embedding))
+        x = torch.cat(embeds, -1)
+        x = self.linear(x)
+        # x: (B, S, hidden_size)
+        x = self.PE(x)
+        memory = self.encoder(x, encoder_padding_mask)
+
+        # Decoder 
 
 
 
