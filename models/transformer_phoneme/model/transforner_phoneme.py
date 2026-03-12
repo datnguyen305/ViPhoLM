@@ -120,7 +120,7 @@ class TransformerPhoneme(nn.Module):
         # loss_result: List [loss_initial, loss_rhyme, loss_tone]
         total_loss = sum(loss_result)
 
-        return loss_result, total_loss 
+        return 0, total_loss 
     
     def predict(self, src):
         pass
@@ -140,6 +140,7 @@ class TransformerPhoneme(nn.Module):
         memory = self.encoder(x, encoder_padding_mask)
 
         # Decoder 
+        for i in range(self.MAX_LENGTH): 
 
 
 
