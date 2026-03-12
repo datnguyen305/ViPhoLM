@@ -35,7 +35,7 @@ model:
   ffn_hidden: 2048
   drop_prob: 0.1
   d_kv: 64
-  max_len: 2000
+  max_len: 2048
   device: cuda
 
 
