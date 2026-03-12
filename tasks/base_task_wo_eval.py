@@ -117,7 +117,8 @@ class BaseTask:
             patience = 0
             self.epoch = 1 # Đảm bảo self.epoch được khởi tạo nếu train từ đầu
 
-        START_EVAL_EPOCH = 10
+        # Cài đặt chu kỳ Evaluate
+        EVAL_FREQ = 5
 
         while True:
             self.train()
@@ -125,7 +126,8 @@ class BaseTask:
             is_the_best_model = False
             exit_train = False
 
-            if self.epoch >= START_EVAL_EPOCH:
+            # Kiểm tra xem epoch hiện tại có phải là bội số của 5 không
+            if self.epoch % EVAL_FREQ == 0:
                 # val scores
                 scores, _ = self.evaluate_metrics(self.dev_dataloader)
                 self.logger.info("Validation scores %s", scores)
@@ -143,8 +145,11 @@ class BaseTask:
                     self.logger.info('patience reached.')
                     exit_train = True
             else:
-                self.logger.info(f"Epoch {self.epoch} hoàn tất. Bỏ qua Evaluate, sẽ bắt đầu đánh giá từ Epoch {START_EVAL_EPOCH}.")
+                # Tính toán epoch evaluate tiếp theo để log ra màn hình cho dễ theo dõi
+                next_eval_epoch = self.epoch + (EVAL_FREQ - (self.epoch % EVAL_FREQ))
+                self.logger.info(f"Epoch {self.epoch} hoàn tất. Bỏ qua Evaluate. Đánh giá tiếp theo tại Epoch {next_eval_epoch}.")
 
+            # Luôn lưu last_model ở mọi epoch
             self.save_checkpoint({
                 "epoch": self.epoch,
                 "best_score": best_score,
