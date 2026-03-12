@@ -9,9 +9,9 @@ class TransformerEncoderBlock(nn.Module):
         super().__init__()
         self.num_features = 3
         self.embedding = clones(nn.Embedding(vocab.vocab_size, config.d_model), self.num_features)
-        self.layers = clones(EncoderLayer(config), config.n_layers)
+        self.layers = clones(EncoderLayer(config, vocab), config.n_layers)
         self.norm = nn.LayerNorm(config.d_model)
-        
+
     def forward(self, x, mask):
         for layer in self.layers:
             x = layer(x, mask)
