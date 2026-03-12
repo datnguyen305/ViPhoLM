@@ -16,7 +16,7 @@ class TransformerPhoneme(nn.Module):
         super().__init__()
         self.vocab = vocab
         self.d_model = config.d_model
-        self.MAX_LENGTH = vocab.max_sentence_length + 2
+        self.MAX_LENGTH = config.inference_length
         self.config = config
 
         # Positional Encoding

@@ -37,6 +37,7 @@ model:
   d_kv: 64
   max_len: 2000
   device: cuda
+  inference_length: 256
 
 
 training:
