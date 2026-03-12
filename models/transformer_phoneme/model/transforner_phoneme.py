@@ -28,11 +28,11 @@ class TransformerPhoneme(nn.Module):
         self.linear = nn.Linear(config.d_model * 3, config.d_model)
         self.dropout = nn.Dropout(0.1)
 
-        self.encoder = TransformerEncoderBlock(config)
+        self.encoder = TransformerEncoderBlock(config, self.vocab)
 
         # Decoder  
         self.embedding 
-        self.decoder = TransformerDecoderBlock(config)
+        self.decoder = TransformerDecoderBlock(config, self.vocab)
         self.phoneme_ff = clones(FeedForward(config), self.num_features)
         self.outs = clones(nn.Linear(config.d_model, vocab.vocab_size), self.num_features)
         self.losses = clones(nn.CrossEntropyLoss(ignore_index=vocab.unk_idx), self.num_features)
