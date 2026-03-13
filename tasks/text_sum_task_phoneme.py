@@ -5,7 +5,7 @@ from tqdm import tqdm
 import json
 from builders.task_builder import META_TASK
 from builders.dataset_builder import build_dataset
-from tasks.base_task_wo_eval import BaseTask
+from tasks.base_task import BaseTask
 from data_utils import collate_fn
 import evaluation
 
