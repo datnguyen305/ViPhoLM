@@ -1,0 +1,65 @@
+vocab:
+  type: ViWordVocab
+  TRAIN: datasets/Wikilingual-dataset/train.json
+  DEV: datasets/Wikilingual-dataset/dev.json
+  TEST: datasets/Wikilingual-dataset/test.json
+  JSON_PATH: datasets/Wikilingual-dataset/train.json
+  TOKENIZER: null
+  
+  min_freq: 3
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train: 
+    type: TextSumDatasetPhoneme
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDatasetPhoneme
+    path: datasets/Wikilingual-dataset/dev.json
+  test: 
+    type: TextSumDatasetPhoneme
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 16
+  num_workers: 10
+
+model:
+  name: Transformer_Phoneme_Longformer_Wikilingual
+  architecture: TransformerPhonemeLongformer 
+  d_model: 512
+  n_layers: 6
+  head: 8
+  hidden_size: 512
+  ffn_hidden: 2048
+  drop_prob: 0.1
+  d_kv: 64
+  max_len: 2000
+  attention_dilation:
+    - 1
+    - 1
+    - 1
+  attention_mode: sliding_chunks
+  attention_probs_dropout_prob: 0.1
+  attention_window:
+    - 256
+    - 256
+    - 256
+  autoregressive: false
+  finetuning_task: null
+  hidden_act: gelu
+  
+  device: cuda
+  inference_length: 256
+
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 1 
+  lr_coverage: 2
+  warmup: 8000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTaskPhoneme # Đảm bảo khớp với tên @META_TASK.register() trong file task
