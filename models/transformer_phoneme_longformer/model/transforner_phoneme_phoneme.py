@@ -51,7 +51,8 @@ class TransformerPhonemeLongformer(nn.Module):
         if src.shape[1] < self.config.max_len:
             pad_length = self.config.max_len - src.shape[1]
 
-            pad = torch.zeros(src.shape[0], pad_length, 3, device=src.device)
+            pad = torch.zeros(src.shape[0], pad_length, 3,\
+                               device=src.device, dtype=torch.long)
             pad[:,:,0] = 3
 
             src = torch.cat([src, pad], dim=1)
@@ -60,7 +61,8 @@ class TransformerPhonemeLongformer(nn.Module):
         if trg.shape[1] < self.config.max_len:
             pad_length = self.config.max_len - trg.shape[1]
 
-            pad = torch.zeros(trg.shape[0], pad_length, 3, device=trg.device)
+            pad = torch.zeros(trg.shape[0], pad_length, 3, \
+                               device=trg.device, dtype=torch.long)
             pad[:,:,0] = 3
 
             src = torch.cat([trg, pad], dim=1)
@@ -75,6 +77,7 @@ class TransformerPhonemeLongformer(nn.Module):
         # decoder_input: (B, S - 1, 3) [<bos>, 3, 4, 5, 6, ...]
     
         # src: (B, S, 3)
+
         embeds = []
         for i in range(self.num_features):
             embeds.append(self.dropout(self.src_embedding[i](src[:, :, i])))
