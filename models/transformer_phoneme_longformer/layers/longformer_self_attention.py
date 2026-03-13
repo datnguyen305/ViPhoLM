@@ -46,7 +46,6 @@ class LongformerSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        layer_id,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
