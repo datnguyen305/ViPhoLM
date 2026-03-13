@@ -7,18 +7,18 @@ from models.transformer_phoneme_longformer.layers.longformer_self_attention impo
 from vocabs.viword_vocab import ViWordVocab
 
 class EncoderLayer(nn.Module):
-    def __init__(self, config, vocab: ViWordVocab):
+    def __init__(self, config, vocab: ViWordVocab, layer_id: int):
         super().__init__()
 
 
         self.self_attn = LongformerSelfAttention(
-            config)
+            config, layer_id)
         self.feed_forward = PositionwiseFeedForward(config)
         self.sublayer = clones(SublayerConnection(config), 2)
 
-    def forward(self, x, mask, id):
+    def forward(self, x, mask):
     
-        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, key_padding_mask=mask, layer_id = id)[0])
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, key_padding_mask=mask)[0])
         # x: (B, S, d_model)
 
         return self.sublayer[1](x, self.feed_forward)

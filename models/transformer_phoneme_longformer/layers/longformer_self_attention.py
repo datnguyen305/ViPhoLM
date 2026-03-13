@@ -6,7 +6,7 @@ from models.transformer_phoneme_longformer.utils.sliding_chunk import sliding_ch
 from models.transformer_phoneme_longformer.utils.diagonaled_mm_tvm import diagonaled_mm as diagonaled_mm_tvm, mask_invalid_locations
 
 class LongformerSelfAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_id):
         super(LongformerSelfAttention, self).__init__()
         if config.d_model % config.head != 0:
             raise ValueError(
@@ -27,7 +27,7 @@ class LongformerSelfAttention(nn.Module):
 
         self.dropout = config.drop_prob
 
-        
+        self.layer_id = layer_id
         self.attention_mode = config.attention_mode
         self.autoregressive = config.autoregressive
 
@@ -56,7 +56,7 @@ class LongformerSelfAttention(nn.Module):
     ):
         assert encoder_hidden_states is None, "`encoder_hidden_states` is not supported and should be None"
         assert encoder_attention_mask is None, "`encoder_attention_mask` is not supported and should be None"
-        self.layer_id = layer_id
+        
         if attention_mask is not None:
             attention_mask = attention_mask.squeeze(dim=2).squeeze(dim=1)
             key_padding_mask = attention_mask < 0
