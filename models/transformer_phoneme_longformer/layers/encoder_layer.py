@@ -17,7 +17,6 @@ class EncoderLayer(nn.Module):
         self.sublayer = clones(SublayerConnection(config), 2)
 
     def forward(self, x, mask):
-    
         x = self.sublayer[0](x, lambda x: self.self_attn(x, attention_mask=mask)[0])
         # x: (B, S, d_model)
 
