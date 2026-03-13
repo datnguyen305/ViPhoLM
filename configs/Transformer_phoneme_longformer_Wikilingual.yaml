@@ -23,7 +23,7 @@ dataset:
     type: TextSumDatasetPhoneme
     path: datasets/Wikilingual-dataset/test.json
   batch_size: 16
-  num_workers: 10
+  num_workers: 128
 
 model:
   name: Transformer_Phoneme_Longformer_Wikilingual
