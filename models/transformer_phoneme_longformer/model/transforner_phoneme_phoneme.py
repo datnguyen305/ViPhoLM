@@ -153,6 +153,18 @@ class TransformerPhonemeLongformer(nn.Module):
         # src: (B, S, 3)
         src = src[:, :self.config.max_len]
         B, S, W = src.shape 
+
+        # Padding to config.max_len 
+        # src (B, S, 3) with S < config.max_len
+        if src.shape[1] < self.config.max_len:
+            pad_length = self.config.max_len - src.shape[1]
+
+            pad = torch.zeros(src.shape[0], pad_length, 3,\
+                               device=src.device, dtype=torch.long)
+            pad[:,:,0] = 3
+
+            src = torch.cat([src, pad], dim=1)
+
         B = src.size(0)
         encoder_padding_mask = create_padding_mask(src, 3)
 
