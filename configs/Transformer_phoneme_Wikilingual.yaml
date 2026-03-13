@@ -30,7 +30,7 @@ model:
   architecture: TransformerPhoneme 
   d_model: 512
   n_layers: 6
-  head: 8
+  head: 4
   hidden_size: 512
   ffn_hidden: 2048
   drop_prob: 0.1
