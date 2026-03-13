@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from vocabs.viword_vocab import Vocab
+import torch.nn.functional as F
 from builders.model_builder import META_ARCHITECTURE
 from models.transformer_phoneme_longformer.utils.clone import clones
 from models.transformer_phoneme_longformer.utils.padding_mask import create_padding_mask
@@ -40,12 +41,32 @@ class TransformerPhonemeLongformer(nn.Module):
     def forward(self, src, trg):
         # src: (B, S, 3)
         # trg: (B, S, 3)
-
+        B, S, W = src.shape
+        _, trg_S , _ = trg.shape
         src = src[:, :self.config.max_len]
         trg = trg[:, :self.config.max_len]
 
+        # Padding to config.max_len 
+        # src (B, S, 3) with S < config.max_len
+        if src.shape[1] < self.config.max_len:
+            pad_length = self.config.max_len - src.shape[1]
+
+            pad = torch.zeros(src.shape[0], pad_length, 3, device=src.device)
+            pad[:,:,0] = 3
+
+            src = torch.cat([src, pad], dim=1)
+
+        # trg (B, S, 3) with S < config.max_len
+        if trg.shape[1] < self.config.max_len:
+            pad_length = self.config.max_len - trg.shape[1]
+
+            pad = torch.zeros(trg.shape[0], pad_length, 3, device=trg.device)
+            pad[:,:,0] = 3
+
+            src = torch.cat([trg, pad], dim=1)
+
         encoder_padding_mask = create_padding_mask(src, 3)
-        B, S, W = src.shape
+        
 
         target = trg[:, 1:, :]
         # target: (B, S - 1, 3) [4, 5, 8, ... <eos>]
