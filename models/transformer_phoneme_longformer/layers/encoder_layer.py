@@ -11,10 +11,8 @@ class EncoderLayer(nn.Module):
         super().__init__()
 
 
-        self.self_attn = LongformerSelfAttention(config.d_model, \
-            config.head,
-            
-            batch_first=True)
+        self.self_attn = LongformerSelfAttention(
+            config.d_model,config.head)
         self.feed_forward = PositionwiseFeedForward(config)
         self.sublayer = clones(SublayerConnection(config), 2)
 
