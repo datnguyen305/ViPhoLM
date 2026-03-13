@@ -1,6 +1,6 @@
 import torch 
 from torch import nn
-from torch.nn import F  
+from torch.nn.functional import F  
 import math
 from models.transformer_phoneme_longformer.utils.sliding_chunk import sliding_chunks_matmul_qk, sliding_chunks_matmul_pv
 from models.transformer_phoneme_longformer.utils.diagonaled_mm_tvm import diagonaled_mm as diagonaled_mm_tvm, mask_invalid_locations
