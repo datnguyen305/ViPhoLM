@@ -5,4 +5,3 @@ def create_padding_mask(seq, pad_idx):
     """
     seq = seq[:, :, 0]
     return (seq == pad_idx)
-    
