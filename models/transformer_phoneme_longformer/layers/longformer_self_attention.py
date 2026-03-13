@@ -6,7 +6,7 @@ from models.transformer_phoneme_longformer.utils.sliding_chunk import sliding_ch
 from models.transformer_phoneme_longformer.utils.diagonaled_mm_tvm import diagonaled_mm as diagonaled_mm_tvm, mask_invalid_locations
 
 class LongformerSelfAttention(nn.Module):
-    def __init__(self, config, layer_id):
+    def __init__(self, config):
         super(LongformerSelfAttention, self).__init__()
         if config.d_model % config.head != 0:
             raise ValueError(
