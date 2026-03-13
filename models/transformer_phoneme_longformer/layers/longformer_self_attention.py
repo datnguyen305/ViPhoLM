@@ -27,7 +27,7 @@ class LongformerSelfAttention(nn.Module):
 
         self.dropout = config.drop_prob
 
-        self.layer_id = layer_id
+        
         self.attention_mode = config.attention_mode
         self.autoregressive = config.autoregressive
 
@@ -46,15 +46,17 @@ class LongformerSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states,
+        layer_id,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
+        
     ):
         assert encoder_hidden_states is None, "`encoder_hidden_states` is not supported and should be None"
         assert encoder_attention_mask is None, "`encoder_attention_mask` is not supported and should be None"
-
+        self.layer_id = layer_id
         if attention_mask is not None:
             attention_mask = attention_mask.squeeze(dim=2).squeeze(dim=1)
             key_padding_mask = attention_mask < 0

@@ -13,6 +13,6 @@ class TransformerEncoderBlock(nn.Module):
         self.norm = nn.LayerNorm(config.d_model)
 
     def forward(self, x, mask):
-        for layer in self.layers:
-            x = layer(x, mask)
+        for i, layer in enumerate(self.layers):
+            x = layer(x, mask, i)
         return self.norm(x)
