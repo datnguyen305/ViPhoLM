@@ -1,0 +1,54 @@
+vocab:
+  type: BPE_Vocab
+  path:
+    train: datasets/Wikilingual-dataset/train.json
+    dev: datasets/Wikilingual-dataset/dev.json
+    test: datasets/Wikilingual-dataset/test.json
+  min_freq: 3
+  vocab_size: 30000
+  model_prefix: checkpoints/LSTM_BPE_Wikilingual
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+dataset:
+  train:
+    type: TextSumDatasetBPE
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDatasetBPE
+    path: datasets/Wikilingual-dataset/dev.json
+  test:
+    type: TextSumDatasetBPE
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 16
+  num_workers: 4
+
+model:
+  name: LSTM_BPE_Wikilingual
+  architecture: LSTM_Model_BPE
+  d_model: 512
+  encoder:
+    layer_dim: 3
+    input_dim: 512
+    hidden_size: 512
+    bidirectional: True
+    dropout: 0.1
+  decoder:
+    layer_dim: 3
+    input_dim: 512
+    hidden_size: 512
+    bidirectional: False
+    dropout: 0.1
+  label_smoothing: 0.1
+  device: cuda
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.15
+  warmup: 1000
+  patience: 5
+  score: rouge-L
+
+task: TextSumTask
