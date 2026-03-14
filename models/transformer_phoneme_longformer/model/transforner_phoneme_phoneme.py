@@ -37,6 +37,20 @@ class TransformerPhonemeLongformer(nn.Module):
         self.phoneme_ff = clones(FeedForward(config), self.num_features)
         self.outs = clones(nn.Linear(config.d_model, vocab.vocab_size), self.num_features)
         self.losses = clones(nn.CrossEntropyLoss(ignore_index=vocab.unk_idx), self.num_features)
+        self.apply(self._init_weights)
+        
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0.0)
+                
+        elif isinstance(module, nn.Embedding):
+            nn.init.xavier_uniform_(module.weight)
+            
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.constant_(module.weight, 1.0)
+            nn.init.constant_(module.bias, 0.0)
 
     def forward(self, src, trg):
         # src: (B, S, 3)
