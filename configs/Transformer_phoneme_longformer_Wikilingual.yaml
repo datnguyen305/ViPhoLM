@@ -32,10 +32,10 @@ model:
   n_layers: 3
   head: 8
   hidden_size: 512
-  ffn_hidden: 2048
+  ffn_hidden: 3072
   drop_prob: 0.1
   d_kv: 64
-  max_len: 2048
+  max_len: 4096
   attention_dilation:
     - 1
     - 1
