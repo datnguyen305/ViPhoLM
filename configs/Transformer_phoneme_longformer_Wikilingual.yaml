@@ -22,7 +22,7 @@ dataset:
   test: 
     type: TextSumDatasetPhoneme
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 16
+  batch_size: 8
   num_workers: 128
 
 model:
