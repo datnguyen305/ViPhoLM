@@ -115,7 +115,7 @@ class TransformerPhonemeLongformer(nn.Module):
         B, S, W = decoder_input.shape
         decoder_padding_mask = create_standard_padding_mask(decoder_input, 3)
         decoder_causal_mask = create_causal_mask(S, self.config.device)
-
+        memory_padding_mask_bool = create_standard_padding_mask(src, 3)
         # decoder_input: (B, S, 3)
         embeds = []
         for i in range(self.num_features):
@@ -132,7 +132,7 @@ class TransformerPhonemeLongformer(nn.Module):
         # x: (B, S, d_model)
 
         x = self.decoder(x, memory, decoder_causal_mask, \
-                         decoder_padding_mask, encoder_padding_mask)
+                         decoder_padding_mask, memory_padding_mask_bool)
         
         ff_out = []
         for i in range(self.num_features):
@@ -181,7 +181,7 @@ class TransformerPhonemeLongformer(nn.Module):
 
         B = src.size(0)
         encoder_padding_mask = create_padding_mask(src, 3)
-
+        memory_padding_mask_bool = create_standard_padding_mask(src, 3)
         # embedding
         embeds = []
         for i in range(self.num_features):
@@ -219,7 +219,7 @@ class TransformerPhonemeLongformer(nn.Module):
             trg_causal_mask = create_causal_mask(decoder_input.size(1), self.config.device)
 
             x = self.decoder(x, memory, trg_causal_mask, \
-                         trg_mask, encoder_padding_mask)
+                         trg_mask, memory_padding_mask_bool)
             x = x[:, -1:, :]
             ff_out = []
             for i in range(self.num_features):
