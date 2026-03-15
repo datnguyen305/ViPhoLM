@@ -17,7 +17,7 @@ class TransformerPhonemeLongformer(nn.Module):
         super().__init__()
         self.vocab = vocab
         self.d_model = config.d_model
-        self.MAX_LENGTH = config.inference_length
+        self.MAX_LENGTH = self.vocab.max_sentence_length + 2
         self.config = config
 
         # Positional Encoding
@@ -38,7 +38,7 @@ class TransformerPhonemeLongformer(nn.Module):
         self.outs = clones(nn.Linear(config.d_model, vocab.vocab_size), self.num_features)
         self.losses = clones(nn.CrossEntropyLoss(ignore_index=vocab.unk_idx), self.num_features)
         self.apply(self._init_weights)
-        
+
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             nn.init.xavier_uniform_(module.weight)

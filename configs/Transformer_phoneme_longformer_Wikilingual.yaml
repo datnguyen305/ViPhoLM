@@ -40,11 +40,9 @@ model:
     - 1
     - 1
     - 1
-    - 1
   attention_mode: sliding_chunks
   attention_probs_dropout_prob: 0.2
   attention_window:
-    - 256
     - 256
     - 256
     - 256
