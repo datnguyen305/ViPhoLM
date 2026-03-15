@@ -45,7 +45,7 @@ model:
   hidden_act: gelu
 
   device: cuda
-  inference_length: 150
+  inference_length: 100
 
 
 training:
