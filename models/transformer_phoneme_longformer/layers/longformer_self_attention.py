@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import math
 from models.transformer_phoneme_longformer.utils.sliding_chunk import sliding_chunks_matmul_qk, sliding_chunks_matmul_pv
 from models.transformer_phoneme_longformer.utils.diagonaled_mm_tvm import diagonaled_mm as diagonaled_mm_tvm, mask_invalid_locations
-from longformer.sliding_chunks import sliding_chunks_no_overlap_matmul_qk, sliding_chunks_no_overlap_matmul_pv
+from models.transformer_phoneme_longformer.utils.sliding_chunk import sliding_chunks_no_overlap_matmul_qk, sliding_chunks_no_overlap_matmul_pv
 
 class LongformerSelfAttention(nn.Module):
     def __init__(self, config, layer_id):
