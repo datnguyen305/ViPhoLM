@@ -4,7 +4,7 @@ from vocabs.viword_vocab import Vocab
 import torch.nn.functional as F
 from builders.model_builder import META_ARCHITECTURE
 from models.transformer_phoneme_longformer.utils.clone import clones
-from models.transformer_phoneme_longformer.utils.padding_mask import create_padding_mask
+from models.transformer_phoneme_longformer.utils.padding_mask import create_padding_mask, create_standard_padding_mask
 from models.transformer_phoneme_longformer.utils.causal_mask import create_causal_mask
 from models.transformer_phoneme_longformer.blocks.decoder_block import TransformerDecoderBlock
 from models.transformer_phoneme_longformer.blocks.encoder_block import TransformerEncoderBlock
@@ -113,7 +113,7 @@ class TransformerPhonemeLongformer(nn.Module):
 
         # Decoder
         B, S, W = decoder_input.shape
-        decoder_padding_mask = create_padding_mask(decoder_input, 3)
+        decoder_padding_mask = create_standard_padding_mask(decoder_input, 3)
         decoder_causal_mask = create_causal_mask(S, self.config.device)
 
         # decoder_input: (B, S, 3)
@@ -215,7 +215,7 @@ class TransformerPhonemeLongformer(nn.Module):
             x = self.PE(x)
 
             # Masking
-            trg_mask = create_padding_mask(decoder_input, 3)
+            trg_mask = create_standard_padding_mask(decoder_input, 3)
             trg_causal_mask = create_causal_mask(decoder_input.size(1), self.config.device)
 
             x = self.decoder(x, memory, trg_causal_mask, \

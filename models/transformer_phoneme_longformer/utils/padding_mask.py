@@ -19,3 +19,11 @@ def create_padding_mask(seq, pad_idx):
     mask[:, 0] = 1
     
     return mask
+
+def create_standard_padding_mask(seq, pad_idx):
+    """ Dùng cho PyTorch MultiheadAttention truyền thống (Trả về True/False) """
+    if seq.dim() == 3:
+        seq = seq[:, :, 0]
+        
+    # Trả về Boolean: True là Pad (Che đi), False là chữ thật (Giữ lại)
+    return (seq == pad_idx)
