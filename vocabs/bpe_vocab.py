@@ -65,13 +65,15 @@ class BPE_Vocab(object):
 
         model_dir = config.model_prefix
         os.makedirs(model_dir, exist_ok=True)
+        
+        self.model_prefix = os.path.join(model_dir, "bpe")
 
-        model_file = config.model_prefix + ".model"
+        model_file = self.model_prefix + ".model"
 
         if not os.path.exists(model_file):
             spm.SentencePieceTrainer.train(
                 sentence_iterator=self.dataset_iterator(json_dirs),
-                model_prefix=config.model_prefix,
+                model_prefix=self.model_prefix,
                 vocab_size=config.vocab_size,
                 model_type="bpe",
                 character_coverage=1.0,
