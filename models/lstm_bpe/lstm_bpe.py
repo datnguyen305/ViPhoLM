@@ -79,7 +79,7 @@ class LSTM_Model_BPE(nn.Module):
         self.encoder = Encoder(config.encoder, vocab)
         self.decoder = Decoder(config.decoder, vocab)
         
-        self.loss = nn.CrossEntropyLoss()
+        self.loss = nn.CrossEntropyLoss(ignore_index=vocab.pad_idx)
 
     def forward(self, x: torch.Tensor, labels: torch.Tensor):
         encoder_outs, hidden_states = self.encoder(x)

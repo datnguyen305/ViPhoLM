@@ -1,32 +1,32 @@
 vocab:
-  type: BPE_Vocab
+  type: Vocab
   path:
-    train: datasets/Wikilingual-dataset/train.json
-    dev: datasets/Wikilingual-dataset/dev.json
-    test: datasets/Wikilingual-dataset/test.json
+    train: datasets/Vietnews-dataset/train.json
+    dev: datasets/Vietnews-dataset/dev.json
+    test: datasets/Vietnews-dataset/test.json
   min_freq: 3
   vocab_size: 30000
-  model_prefix: checkpoints/LSTM_BPE_Wikilingual
+  model_prefix: checkpoints/LSTM_BPE_VietNews
   bos_token: <bos>
   eos_token: <eos>
   unk_token: <unk>
   pad_token: <pad>
 
 dataset:
-  train:
-    type: TextSumDatasetBPE
-    path: datasets/Wikilingual-dataset/train.json
+  train: 
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/train.json
   dev:
-    type: TextSumDatasetBPE
-    path: datasets/Wikilingual-dataset/dev.json
-  test:
-    type: TextSumDatasetBPE
-    path: datasets/Wikilingual-dataset/test.json
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/dev.json
+  test: 
+    type: TextSumDataset
+    path: datasets/Vietnews-dataset/test.json
   batch_size: 16
   num_workers: 8
 
 model:
-  name: LSTM_BPE_Wikilingual
+  name: LSTM_VietNews_BPE
   architecture: LSTM_Model_BPE
   d_model: 512
   encoder:
