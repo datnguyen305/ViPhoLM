@@ -1,9 +1,9 @@
 import torch 
 from torch import nn 
-from models.transformer_phoneme_longformer.layers.positionwise_feed_forward import PositionwiseFeedForward
-from models.transformer_phoneme_longformer.utils.clone import clones
-from models.transformer_phoneme_longformer.layers.sub_layer_connection import SublayerConnection
-from models.transformer_phoneme_longformer.layers.longformer_self_attention import LongformerSelfAttention
+from models.vipholm.layers.positionwise_feed_forward import PositionwiseFeedForward
+from models.vipholm.utils.clone import clones
+from models.vipholm.layers.sub_layer_connection import SublayerConnection
+from models.vipholm.layers.longformer_self_attention import LongformerSelfAttention
 from vocabs.viword_vocab import ViWordVocab
 
 class EncoderLayer(nn.Module):

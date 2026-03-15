@@ -3,13 +3,13 @@ from torch import nn
 from vocabs.viword_vocab import Vocab
 import torch.nn.functional as F
 from builders.model_builder import META_ARCHITECTURE
-from models.transformer_phoneme_longformer.utils.clone import clones
-from models.transformer_phoneme_longformer.utils.padding_mask import create_padding_mask, create_standard_padding_mask
-from models.transformer_phoneme_longformer.utils.causal_mask import create_causal_mask
-from models.transformer_phoneme_longformer.blocks.decoder_block import TransformerDecoderBlock
-from models.transformer_phoneme_longformer.blocks.encoder_block import TransformerEncoderBlock
-from models.transformer_phoneme_longformer.layers.phoneme_feed_forward import FeedForward
-from models.transformer_phoneme_longformer.embedding.positional_embedding import PositionalEncoding
+from models.vipholm.utils.clone import clones
+from models.vipholm.utils.padding_mask import create_padding_mask, create_standard_padding_mask
+from models.vipholm.utils.causal_mask import create_causal_mask
+from models.vipholm.blocks.decoder_block import TransformerDecoderBlock
+from models.vipholm.blocks.encoder_block import TransformerEncoderBlock
+from models.vipholm.layers.phoneme_feed_forward import FeedForward
+from models.vipholm.embedding.positional_embedding import PositionalEncoding
 
 @META_ARCHITECTURE.register()
 class TransformerPhonemeLongformer(nn.Module):

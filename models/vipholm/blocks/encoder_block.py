@@ -1,7 +1,7 @@
 from torch import nn
 from vocabs.viword_vocab import ViWordVocab 
-from models.transformer_phoneme_longformer.layers.encoder_layer import EncoderLayer
-from models.transformer_phoneme_longformer.utils.clone import clones
+from models.vipholm.layers.encoder_layer import EncoderLayer
+from models.vipholm.utils.clone import clones
 
 
 class TransformerEncoderBlock(nn.Module):

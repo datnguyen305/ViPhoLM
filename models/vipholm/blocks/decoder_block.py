@@ -1,7 +1,7 @@
 from torch import nn 
-from models.transformer_phoneme_longformer.utils.clone import clones
-from models.transformer_phoneme_longformer.embedding.positional_embedding import PositionalEncoding
-from models.transformer_phoneme_longformer.layers.decoder_layer import DecoderLayer 
+from models.vipholm.utils.clone import clones
+from models.vipholm.embedding.positional_embedding import PositionalEncoding
+from models.vipholm.layers.decoder_layer import DecoderLayer 
 
 class TransformerDecoderBlock(nn.Module):
     def __init__(self, config, vocab):

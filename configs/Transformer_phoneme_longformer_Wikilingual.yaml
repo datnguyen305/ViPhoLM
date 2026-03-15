@@ -43,7 +43,7 @@ model:
   autoregressive: false
   finetuning_task: null
   hidden_act: gelu
-
+  label_smoothing: 0.1
   device: cuda
   inference_length: 100
 
