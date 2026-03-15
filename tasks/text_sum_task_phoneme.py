@@ -56,7 +56,7 @@ class TextSumTaskPhoneme(BaseTask):
         self.model.train()
         train_losses = []
         running_loss = .0
-        scaler = torch.cuda.amp.GradScaler()
+        scaler = torch.amp.GradScaler('cuda')
         
         with tqdm(desc='Epoch %d - Training' % (self.epoch+1), unit='it', total=len(self.train_dataloader)) as pbar:
             for it, items in enumerate(self.train_dataloader):
@@ -66,7 +66,7 @@ class TextSumTaskPhoneme(BaseTask):
                 self.optim.zero_grad()
 
                 # Forward
-                with torch.cuda.amp.autocast():
+                with torch.amp.autocast('cuda'):
                     _, loss = self.model(input_ids, labels)
                 
                 # Backward
@@ -74,7 +74,7 @@ class TextSumTaskPhoneme(BaseTask):
 
                 scaler.step(self.optim)
                 scaler.update()
-                
+
                 running_loss += loss.item()
                 train_losses.append(loss.item())
 
