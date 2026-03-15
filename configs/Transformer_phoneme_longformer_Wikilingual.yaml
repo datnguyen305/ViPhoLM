@@ -36,16 +36,10 @@ model:
   drop_prob: 0.1
   d_kv: 64
   max_len: 4096
-  attention_dilation:
-    - 1
-    - 1
-    - 1
-  attention_mode: sliding_chunks
+  attention_dilation: [1, 1, 1]
+  attention_mode: sliding_chunks_no_overlap
   attention_probs_dropout_prob: 0.2
-  attention_window:
-    - 256
-    - 256
-    - 256
+  attention_window: [256, 256, 256]
   autoregressive: false
   finetuning_task: null
   hidden_act: gelu
