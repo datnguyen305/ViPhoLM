@@ -186,7 +186,7 @@ class Longformer(nn.Module):
         # --- Encoder ---
         x_src = self.dropout(self.src_embedding(src))
         x_src = self.PE(x_src)
-        memory = self.encoder(x_src, encoder_padding_mask, global_attention_mask)
+        memory = self.encoder(x_src, encoder_padding_mask)
 
         # --- Decoder ---
         decoder_padding_mask = create_standard_padding_mask(decoder_input, self.vocab.pad_idx)

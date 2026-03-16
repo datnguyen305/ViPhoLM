@@ -29,7 +29,7 @@ model:
   d_model: 512
   num_layers: 3
   nhead: 8
-  head:8
+  head: 8
   hidden_size: 512
   d_ff: 3072
   n_layers: 3
