@@ -29,9 +29,13 @@ model:
   d_model: 512
   num_layers: 3
   nhead: 8
+  head:8
   hidden_size: 512
   d_ff: 3072
+  n_layers: 3
+  ffn_hidden: 3072
   dropout: 0.1
+  drop_prob: 0.1
   d_kv: 64
   max_len: 4096
   attention_dilation: [1, 1, 1]
