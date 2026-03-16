@@ -49,11 +49,11 @@ class FeedForward(nn.Module):
 
 
 class LongformerEncoderLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_id):
         super().__init__()
-        self.self_attn = LongformerSelfAttention(config)
-        self.feed_forward = FeedForward(config)
+        self.self_attn = LongformerSelfAttention(config, layer_id=layer_id) 
         
+        self.feed_forward = FeedForward(config)
         self.norm1 = nn.LayerNorm(config.d_model)
         self.norm2 = nn.LayerNorm(config.d_model)
         self.dropout = nn.Dropout(config.dropout)
@@ -80,7 +80,10 @@ class LongformerEncoderLayer(nn.Module):
 class LongformerEncoderBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layers = nn.ModuleList([LongformerEncoderLayer(config) for _ in range(config.num_layers)])
+        self.layers = nn.ModuleList([
+            LongformerEncoderLayer(config, layer_id=i) for i in range(config.num_layers)
+        ])
+        
         self.norm = nn.LayerNorm(config.d_model)
 
     def forward(self, x, padding_mask, global_attention_mask):
