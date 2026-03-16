@@ -9,8 +9,6 @@ def create_padding_mask(seq, pad_idx):
        0: Local attention (Cửa sổ trượt Sliding window)
        1: Global attention (Dành cho token đặc biệt gom ngữ cảnh)
     """
-    if seq.dim() == 3:
-        seq = seq[:, :, 0]
     
     mask = torch.zeros_like(seq, dtype=torch.long)
     
@@ -23,8 +21,6 @@ def create_padding_mask(seq, pad_idx):
 
 def create_standard_padding_mask(seq, pad_idx):
     """ Dùng cho PyTorch MultiheadAttention truyền thống (Trả về True/False) """
-    if seq.dim() == 3:
-        seq = seq[:, :, 0]
         
     # Trả về Boolean: True là Pad (Che đi), False là chữ thật (Giữ lại)
     return (seq == pad_idx)
