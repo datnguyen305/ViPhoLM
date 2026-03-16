@@ -56,4 +56,4 @@ training:
   patience: 5
   score: rouge-L
 
-task: TextSumTaskPhoneme # Đảm bảo khớp với tên @META_TASK.register() trong file task
+task: TextSumTask # Đảm bảo khớp với tên @META_TASK.register() trong file task
