@@ -21,4 +21,4 @@ from .bottom_up.content_selector import ContentSelector
 from .lstm_phoneme.model.lstm_phoneme import LSTM_Model_Phoneme
 from .bilstm_phoneme.bilstm_phoneme import BiLSTM_Model_Phoneme
 from .transformer_phoneme.model.transforner_phoneme import TransformerPhoneme
-from .transformer_phoneme_longformer.model.transforner_phoneme_phoneme import TransformerPhonemeLongformer
+from .vipholm.model.vipholm import ViPhoLM

@@ -12,7 +12,7 @@ from models.vipholm.layers.phoneme_feed_forward import FeedForward
 from models.vipholm.embedding.positional_embedding import PositionalEncoding
 
 @META_ARCHITECTURE.register()
-class TransformerPhonemeLongformer(nn.Module):
+class ViPhoLM(nn.Module):
     def __init__(self, config, vocab: Vocab):
         super().__init__()
         self.vocab = vocab
