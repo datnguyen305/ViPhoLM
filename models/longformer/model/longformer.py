@@ -58,11 +58,10 @@ class LongformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(config.d_model)
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, x, padding_mask, global_attention_mask):
+    def forward(self, x, padding_mask):
         attn_output = self.self_attn(
             hidden_states=x,
             attention_mask=padding_mask,
-            global_attention_mask=global_attention_mask
         )
         
         # Nếu attention của bạn trả về tuple (output, weights), lấy phần tử đầu
@@ -86,9 +85,9 @@ class LongformerEncoderBlock(nn.Module):
         
         self.norm = nn.LayerNorm(config.d_model)
 
-    def forward(self, x, padding_mask, global_attention_mask):
+    def forward(self, x, padding_mask):
         for layer in self.layers:
-            x = layer(x, padding_mask, global_attention_mask)
+            x = layer(x, padding_mask)
         return self.norm(x)
 
 class TransformerDecoderLayer(nn.Module):
@@ -220,7 +219,7 @@ class Longformer(nn.Module):
         # --- Encoder ---
         x_src = self.dropout(self.src_embedding(src))
         x_src = self.PE(x_src)
-        memory = self.encoder(x_src, encoder_padding_mask, global_attention_mask)
+        memory = self.encoder(x_src, encoder_padding_mask)
 
         # --- Decoder Tự Hồi Quy (Autoregressive) ---
         decoder_input = torch.full((B, 1), self.vocab.bos_idx, dtype=torch.long, device=self.config.device)
