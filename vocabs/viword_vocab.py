@@ -79,6 +79,7 @@ class ViWordVocab(Vocab):
                     if components:
                         phonemes.update([phoneme for phoneme in components if phoneme])
 
+                target_text = preprocess_sentence(target_text)
                 if self.max_sentence_length < len(target_text):
                     self.max_sentence_length = len(target_text)
 
