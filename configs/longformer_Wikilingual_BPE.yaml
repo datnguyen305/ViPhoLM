@@ -1,10 +1,12 @@
 vocab:
-  type: Vocab
+  type: BPE_Vocab
   path:
     train: datasets/Wikilingual-dataset/train.json
     dev: datasets/Wikilingual-dataset/dev.json
     test: datasets/Wikilingual-dataset/test.json
   min_freq: 3
+  model_prefix: checkpoints/LongformerEncoderDecoder_Wikilingual_BPE
+  vocab_size: 30000
   bos_token: <bos>
   eos_token: <eos>
   unk_token: <unk>
@@ -12,19 +14,19 @@ vocab:
 
 dataset:
   train: 
-    type: TextSumDataset
+    type: TextSumDatasetBPE
     path: datasets/Wikilingual-dataset/train.json
   dev:
-    type: TextSumDataset
+    type: TextSumDatasetBPE
     path: datasets/Wikilingual-dataset/dev.json
   test: 
-    type: TextSumDataset
+    type: TextSumDatasetBPE
     path: datasets/Wikilingual-dataset/test.json
   batch_size: 16
   num_workers: 8
 
 model:
-  name: LongformerEncoderDecoder_Wikilingual
+  name: LongformerEncoderDecoder_Wikilingual_BPE
   architecture: LongformerEncoderDecoderModel
   d_model: 512
   label_smoothing: 0.1

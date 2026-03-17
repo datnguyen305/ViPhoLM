@@ -6,7 +6,7 @@ import math
 from typing import List, Optional, Tuple, Dict
 from transformers import PretrainedConfig
 
-from vocabs.vocab import Vocab
+from vocabs.bpe_vocab import BPE_Vocab
 from builders.model_builder import META_ARCHITECTURE
 
 from .sliding_chunks import sliding_chunks_matmul_qk, sliding_chunks_matmul_pv
@@ -445,7 +445,7 @@ class StandardDecoder(nn.Module):
 
 @META_ARCHITECTURE.register()
 class LongformerEncoderDecoderModel(nn.Module):
-    def __init__(self, config, vocab: Vocab):
+    def __init__(self, config, vocab: BPE_Vocab):
         super().__init__()
         
         # Store vocab indices
@@ -469,7 +469,7 @@ class LongformerEncoderDecoderModel(nn.Module):
         self.config.pad_idx = vocab.pad_idx
 
         self.apply(self._init_weights)
-
+                
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             nn.init.xavier_uniform_(module.weight)
