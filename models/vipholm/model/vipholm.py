@@ -17,7 +17,7 @@ class ViPhoLM(nn.Module):
         super().__init__()
         self.vocab = vocab
         self.d_model = config.d_model
-        self.MAX_LENGTH = config.inference_length
+        self.MAX_LENGTH = self.vocab.max_sentence_length + 2 
         self.config = config
 
         # Positional Encoding
