@@ -54,28 +54,34 @@ class TextSumTaskPhoneme(BaseTask):
 
     def train(self):
         self.model.train()
-
+        train_losses = []
         running_loss = .0
+        
+        # 1. Đã xóa dòng khởi tạo GradScaler
+        
         with tqdm(desc='Epoch %d - Training' % (self.epoch+1), unit='it', total=len(self.train_dataloader)) as pbar:
             for it, items in enumerate(self.train_dataloader):
                 items = items.to(self.device)
-                # forward pass
                 input_ids = items.input_ids
-        
-                labels = items.shifted_right_label
-                
+                labels = items.label 
+                self.optim.zero_grad()
+
                 _, loss = self.model(input_ids, labels)
                 
-                # backward pass
-                self.optim.zero_grad()
                 loss.backward()
-                self.optim.step()
-                running_loss += loss.item()
 
-                # update the training status
+                self.optim.step()
+                
+
+                running_loss += loss.item()
+                train_losses.append(loss.item())
+
                 pbar.set_postfix(loss=running_loss / (it + 1))
                 pbar.update()
+                
                 self.scheduler.step()
+                
+        return train_losses
 
     def evaluate_metrics(self, dataloader: DataLoader) -> dict:
         self.model.eval()
