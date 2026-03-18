@@ -26,8 +26,8 @@ dataset:
   num_workers: 128
 
 model:
-  name: Transformer_Phoneme_Longformer_Wikilingual
-  architecture: TransformerPhonemeLongformer 
+  name: ViPhoLM_Wikilingual
+  architecture: ViPhoLM 
   d_model: 512
   n_layers: 3
   head: 8
@@ -54,6 +54,7 @@ training:
   lr_coverage: 1
   warmup: 2000
   patience: 5
+  seed: 42
   score: rouge-L
 
 task: TextSumTaskPhoneme # Đảm bảo khớp với tên @META_TASK.register() trong file task
