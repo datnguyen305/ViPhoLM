@@ -34,7 +34,8 @@ class ViPhoLM(nn.Module):
         # Decoder  
         self.tgt_embedding = clones(nn.Embedding(vocab.vocab_size, config.d_model), self.num_features)
         self.decoder = TransformerDecoderBlock(config, self.vocab)
-        self.phoneme_ff = clones(FeedForward(config), self.num_features)
+        self.phoneme_ff = clones(nn.Linear(self.config.d_model, self.config.d_model), \
+                            self.num_features)
         self.outs = clones(nn.Linear(config.d_model, vocab.vocab_size), self.num_features)
         self.losses = clones(nn.CrossEntropyLoss(ignore_index=vocab.unk_idx), self.num_features)
         self.apply(self._init_weights)
@@ -133,6 +134,7 @@ class ViPhoLM(nn.Module):
 
         x = self.decoder(x, memory, decoder_causal_mask, \
                          decoder_padding_mask, memory_padding_mask_bool)
+        # x: (B, S, d_model)
         
         ff_out = []
         for i in range(self.num_features):
