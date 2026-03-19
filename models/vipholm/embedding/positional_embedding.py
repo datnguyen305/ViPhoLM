@@ -16,7 +16,7 @@ class PositionalEncoding(nn.Module):
         
         # Register as buffer (not a parameter, but part of state)
         self.register_buffer('pe', pe)
-    
+        
     def forward(self, x):
         # x shape: [B, L, D]
         seq_len = x.size(1)
