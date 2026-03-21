@@ -15,7 +15,6 @@ def collate_fn(items: List[Instance]) -> InstanceList:
     eos_idx = 2
     unk_idx = 3
 
-    list_ids = [item.id for item in items] # Lấy list id 
     list_vi = [item.input_vietnamese for item in items]
     list_en = [item.input_english for item in items]
     
@@ -33,7 +32,6 @@ def collate_fn(items: List[Instance]) -> InstanceList:
     
     # 4. Trả về đối tượng InstanceList chứa batch đã pad
     return InstanceList(
-        id = list_ids,
         input_vietnamese=padded_vi,
         input_english=padded_en
     )
@@ -44,8 +42,7 @@ class MachineTranslationDataset(Dataset):
     def __init__(self, config, vocab: MTVocab):
         super().__init__()
         path: str = config.path
-        data = json.load(open(path, 'r', encoding='utf-8'))
-        self.data = data
+        self.data = json.load(open(path, 'r', encoding='utf-8'))
         self.vocab = vocab
     
     def __len__(self):
@@ -53,7 +50,7 @@ class MachineTranslationDataset(Dataset):
     
     def __getitem__(self, idx):
         item = self.data[idx]
-        sample_id = item.get("id", str(idx))
+        key = f"sample_{idx}"
         vi_sentence = item["vietnamese"] # str
         en_sentence = item["english"] # str
 
@@ -63,7 +60,7 @@ class MachineTranslationDataset(Dataset):
         encoded_en = self.vocab.encode_sentence_english(en_sentence)
         
         return Instance(
-            id=sample_id,
+            id=key,
             input_vietnamese = encoded_vi, # [(<bos>, <pad>, <pad>), (<initiate>, <rhyme>, <tone>), (<eos>, <pad>, <pad>)]
             input_english = encoded_en # [<bos>, ..., <eos>]
         )
