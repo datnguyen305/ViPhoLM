@@ -94,10 +94,10 @@ class MachineTranslationTask(BaseTask):
 
                 with torch.no_grad():
                     prediction = self.model.predict(input_english)
-                    # input_vietnamese: (B, S_viet, 3); Ex: [(<bos>, <pad>, <pad>), (<initiate>, <rhyme>, <tone>), (<eos>, <pad>, <pad>)]
+                    # input_english: (B, S_eng); Ex: [(<bos>, <pad>, <pad>), (<initiate>, <rhyme>, <tone>), (<eos>, <pad>, <pad>)]
+                    # prediction: (B, S_viet, 3)
 
-
-                    prediction = self.vocab.decode_caption_vietnamese(prediction)
+                    prediction = self.vocab.decode_batch_caption_vietnamese(prediction)
                     label = self.vocab.decode_sentence_english(input_english)
 
                     id = items.id[0]
