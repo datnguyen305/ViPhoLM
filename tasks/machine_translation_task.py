@@ -66,7 +66,7 @@ class MachineTranslationTask(BaseTask):
                 # input_vietnamese: (B, S_viet, 3); Ex: [(<bos>, <pad>, <pad>), (<initiate>, <rhyme>, <tone>), (<eos>, <pad>, <pad>)]
                 # input_english: (B, S_eng)
 
-                _, loss = self.model(input_vietnamese, input_english)
+                _, loss = self.model(input_english, input_vietnamese)
                 
                 # backward pass
                 self.optim.zero_grad()
