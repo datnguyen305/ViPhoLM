@@ -28,7 +28,7 @@ dataset:
   test: 
     type: MachineTranslationDataset
     path: datasets/Wikilingual-dataset/test.json
-  batch_size: 4
+  batch_size: 32
   num_workers: 10
 
 model:
