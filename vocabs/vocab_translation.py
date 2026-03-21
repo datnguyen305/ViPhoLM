@@ -156,7 +156,7 @@ class MTVocab(Vocab):
     def decode_batch_caption_vietnamese(self, caption_batch: torch.Tensor, join_words=True):
         assert caption_batch.dim() == 3
         captions = [
-            self.decode_caption(caption_vec, join_words) for caption_vec in caption_batch
+            self.decode_caption_vietnamese(caption_vec, join_words) for caption_vec in caption_batch
         ]
 
         return captions
