@@ -5,6 +5,7 @@ from .text_sum_dataset_phoneme import TextSumDatasetPhoneme
 from .text_sum_dataset_hierarchy import TextSumDatasetHierarchy
 from .text_sum_dataset_oov import TextSumDatasetOOV
 from .text_sum_dataset_seneca import TextSumDatasetSeneca
+from .machine_translation_dataset import MachineTranslationDataset
 import torch
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F

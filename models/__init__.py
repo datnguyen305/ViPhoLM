@@ -21,3 +21,4 @@ from .lstm_phoneme.model.lstm_phoneme import LSTM_Model_Phoneme
 from .bilstm_phoneme.bilstm_phoneme import BiLSTM_Model_Phoneme
 from .transformer_phoneme.model.transforner_phoneme import TransformerPhoneme
 from .vipholm.model.vipholm import ViPhoLM
+from .lstm_phoneme_translation.model.lstm_phoneme_translation import LSTM_Model3layer_MT

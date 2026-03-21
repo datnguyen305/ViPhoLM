@@ -20,20 +20,45 @@ vocab:
 
 dataset:
   train: 
-    type: TextSumDatasetPhoneme
+    type: MachineTranslationDataset
     path: datasets/Wikilingual-dataset/train.json
   dev:
-    type: TextSumDatasetPhoneme
+    type: MachineTranslationDataset
     path: datasets/Wikilingual-dataset/dev.json
   test: 
-    type: TextSumDatasetPhoneme
+    type: MachineTranslationDataset
     path: datasets/Wikilingual-dataset/test.json
   batch_size: 4
   num_workers: 10
 
-training:
-  seed: 42
+model:
+  name: LSTM_Model3layer_MT_Wikilingual
+  architecture: LSTM_Model3layer_MT
+  d_model: 512
+  encoder:
+    layer_dim: 3 #LSTM 3 layers
+    input_dim: 512
+    hidden_size: 512
+    bidirectional: False
+    dropout: 0.1
+  decoder:
+    layer_dim: 3
+    input_dim: 512
+    hidden_size: 512
+    bidirectional: False
+    dropout: 0.1
+  label_smoothing: 0.1
+  device: cuda
 
+training:
+  learning_rate: 0.15
+  warmup: 1000
+  patience: 5
+  score: BLEU-4
+  checkpoint_path: "checkpoints"
+  seed: 42  
+
+task: MachineTranslationTask
 
 
 
