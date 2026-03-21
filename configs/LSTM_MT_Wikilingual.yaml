@@ -1,0 +1,40 @@
+vocab:
+  type: MTVocab
+  TOKENIZER: null
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+  vietnamese: 
+    path:
+      train: datasets/PhoMT/train.json
+      dev: datasets/PhoMT/dev.json
+      test: datasets/PhoMT/test.json
+  english: 
+    path: 
+      train: datasets/PhoMT/train.json
+      dev: datasets/PhoMT/dev.json
+      test: datasets/PhoMT/test.json
+    min_freq: 3
+
+dataset:
+  train: 
+    type: TextSumDatasetPhoneme
+    path: datasets/Wikilingual-dataset/train.json
+  dev:
+    type: TextSumDatasetPhoneme
+    path: datasets/Wikilingual-dataset/dev.json
+  test: 
+    type: TextSumDatasetPhoneme
+    path: datasets/Wikilingual-dataset/test.json
+  batch_size: 4
+  num_workers: 10
+
+training:
+  seed: 42
+
+
+
+
+  

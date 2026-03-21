@@ -14,7 +14,6 @@ from .fast_seal.copy_sum import CopySummSeal
 from .hepos.hepos import HeposLongformerSummarizer
 # from .hat.hat_model import HATModel
 from .seneca.seneca import SENECA_Baseline
-from .longformer.model.longformer import Longformer
 # from .bottom_up.model import BottomUpSummarizer
 # from .transformer_phoneme.testing import Testing
 from .bottom_up.content_selector import ContentSelector
