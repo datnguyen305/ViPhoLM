@@ -21,13 +21,13 @@ vocab:
 dataset:
   train: 
     type: MachineTranslationDataset
-    path: datasets/Wikilingual-dataset/train.json
+    path: datasets/PhoMT/train.json
   dev:
     type: MachineTranslationDataset
-    path: datasets/Wikilingual-dataset/dev.json
+    path: datasets/PhoMT/dev.json
   test: 
     type: MachineTranslationDataset
-    path: datasets/Wikilingual-dataset/test.json
+    path: datasets/PhoMT/test.json
   batch_size: 32
   num_workers: 10
 
