@@ -76,7 +76,7 @@ class Decoder(nn.Module):
         # decoder_output: (batch_size, 1, vocab_size * 3)
         decoder_outputs = torch.cat(decoder_outputs, dim=1)
         # decoder_outputs: (batch_size, target_len, vocab_size * 3) 
-        decoder_outputs.reshape(batch_size, target_len, self.vocab.vocab_size, -1)
+        decoder_outputs.reshape(batch_size, target_len, self.vocab.vietnamese_vocab_size, -1)
         # decoder_outputs: (batch_size, target_len, vocab_size, 3)
         return decoder_outputs, (decoder_hidden, decoder_memory)
 
