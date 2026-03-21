@@ -8,35 +8,6 @@ from utils.instance import Instance, InstanceList
 from vocabs.vocab_translation import MTVocab
 from vocabs.utils import preprocess_sentence 
 
-
-def collate_fn(items: List[Instance]) -> InstanceList:
-    pad_idx = 0 
-    bos_idx = 1
-    eos_idx = 2
-    unk_idx = 3
-
-    list_vi = [item.input_vietnamese for item in items]
-    list_en = [item.input_english for item in items]
-    
-    # vietnamese padding
-    batch_size = len(list_vi)
-    max_len_vi = max(seq.shape[0] for seq in list_vi)
-    padded_vi = torch.full((batch_size, max_len_vi, 3), fill_value=pad_idx, dtype=torch.long)
-    padded_vi[:, :, 0] = unk_idx
-    for i, seq in enumerate(list_vi):
-        length = seq.shape[0]
-        padded_vi[i, :length, :] = seq    
-
-    # english padding
-    padded_en = pad_sequence(list_en, batch_first=True, padding_value=pad_idx)
-    
-    # 4. Trả về đối tượng InstanceList chứa batch đã pad
-    return InstanceList(
-        input_vietnamese=padded_vi,
-        input_english=padded_en
-    )
-    
-
 @META_DATASET.register() 
 class MachineTranslationDataset(Dataset):
     def __init__(self, config, vocab: MTVocab):

@@ -22,7 +22,8 @@ class Encoder(nn.Module):
 
     def forward(self, input):
         # input: (B, S)
-        B, S  = input.size()
+        print(input.shape)
+        B, S = input.size()
         embed = self.embedding(input)
         # embed: (batch_size, seq_len, hidden_size)
 
