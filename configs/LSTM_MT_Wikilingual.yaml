@@ -35,6 +35,7 @@ model:
   name: LSTM_Model3layer_MT_Wikilingual
   architecture: LSTM_Model3layer_MT
   d_model: 512
+  hidden_size: 512
   encoder:
     layer_dim: 3 #LSTM 3 layers
     input_dim: 512
