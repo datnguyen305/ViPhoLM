@@ -18,6 +18,7 @@ class LSTM_Model3layer_MT(nn.Module):
         self.num_features = 3
         self.config = config
 
+        self.linear_prj = nn.Linear(config.hidden_size * 3, config.hidden_size)    
         self.encoder = Encoder(config.encoder, vocab)
         self.decoder = Decoder(config.decoder, vocab)
         
@@ -64,7 +65,8 @@ class LSTM_Model3layer_MT(nn.Module):
         decoder_hidden, decoder_memory = encoder_states
         # decoder_hidden: (num_layers, batch_size, hidden_size * 3)
         # decoder_memory: (num_layers, batch_size, hidden_size * 3)
-
+        decoder_hidden = self.linear_prj(decoder_hidden)
+        decoder_memory = self.linear_prj(decoder_memory)
         outputs = []
         target_len = self.MAX_LENGTH
 
