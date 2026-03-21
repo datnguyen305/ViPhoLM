@@ -38,7 +38,7 @@ class LSTM_Model3layer_MT(nn.Module):
         for i in range(self.num_features):
             loss_result.append(
                 self.losses[i](
-                    outs[:, :, :, i].reshape(-1, self.vocab.vocab_size), 
+                    outs[:, :, :, i].reshape(-1, self.vocab.vietnamese_vocab_size), 
                     labels[:, :, i].reshape(-1)
                 )
             )
@@ -72,7 +72,7 @@ class LSTM_Model3layer_MT(nn.Module):
             decoder_output, (decoder_hidden, decoder_memory) = self.decoder.forward_step(decoder_input, (decoder_hidden, decoder_memory))
             # decoder_output: (batch_size, 1, vocab_size, 3)
 
-            decoder_output.reshape(batch_size, 1, self.vocab.vocab_size, -1)
+            decoder_output.reshape(batch_size, 1, self.vocab.vietnamese_vocab_size, -1)
             # decoder_output: (batch_size, 1, vocab_size, 3)
             decoder_input = decoder_output.argmax(dim=2)
             # decoder_input: (batch_size, 1, 3)
