@@ -93,7 +93,7 @@ class MachineTranslationTask(BaseTask):
 
 
                 with torch.no_grad():
-                    prediction = self.model.predict(input_vietnamese)
+                    prediction = self.model.predict(input_english)
                     # input_vietnamese: (B, S_viet, 3); Ex: [(<bos>, <pad>, <pad>), (<initiate>, <rhyme>, <tone>), (<eos>, <pad>, <pad>)]
 
 
