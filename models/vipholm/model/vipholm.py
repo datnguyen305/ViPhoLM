@@ -136,17 +136,20 @@ class ViPhoLM(nn.Module):
                          decoder_padding_mask, memory_padding_mask_bool)
         # x: (B, S, d_model)
         
-        ff_out = []
-        for i in range(self.num_features):
-            ff_out.append(self.phoneme_ff[i](x))
-        # ff_out: (B, S, d_model) * 3 
+        """
+        Commented out
+        """
+        # ff_out = []
+        # for i in range(self.num_features):
+        #     ff_out.append(self.phoneme_ff[i](x))
+        # # ff_out: (B, S, d_model) * 3 
 
-        ff_out = torch.stack(ff_out, -1)
-        # ff_out: (B, S, d_model, 3)
+        # ff_out = torch.stack(ff_out, -1)
+        # # ff_out: (B, S, d_model, 3)
 
         ff_prj = []
         for i in range(self.num_features):
-            ff_prj.append(self.outs[i](ff_out[:, :, :, i]))
+            ff_prj.append(self.outs[i](x))
         # ff_out: (B, S, vocab_size) * 3 
         ff_prjout = torch.stack(ff_prj, -1)
         # ff_prjout: (B, S, vocab_size, 3)
