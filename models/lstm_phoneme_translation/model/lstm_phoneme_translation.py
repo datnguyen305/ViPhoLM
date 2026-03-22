@@ -17,7 +17,7 @@ class LSTM_Model3layer_MT(nn.Module):
         self.d_model = config.d_model
         self.num_features = 3
         self.config = config
-
+        
         self.linear_prj = nn.Linear(self.config.hidden_size, self.config.hidden_size*3)    
         self.encoder = Encoder(config.encoder, vocab)
         self.decoder = Decoder(config.decoder, vocab)
