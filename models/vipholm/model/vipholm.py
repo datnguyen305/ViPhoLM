@@ -34,7 +34,7 @@ class ViPhoLM(nn.Module):
         # Decoder  
         self.tgt_embedding = clones(nn.Embedding(vocab.vocab_size, config.d_model), self.num_features)
         self.decoder = TransformerDecoderBlock(config, self.vocab)
-        self.phoneme_ff = clones(nn.Linear(self.config.d_model, self.config.d_model), \
+        self.phoneme_ff = clones(FeedForward(self.config), \
                             self.num_features)
         self.outs = clones(nn.Linear(config.d_model, vocab.vocab_size), self.num_features)
         self.losses = clones(nn.CrossEntropyLoss(ignore_index=vocab.unk_idx), self.num_features)
@@ -136,16 +136,13 @@ class ViPhoLM(nn.Module):
                          decoder_padding_mask, memory_padding_mask_bool)
         # x: (B, S, d_model)
         
-        """
-        Commented out
-        """
-        # ff_out = []
-        # for i in range(self.num_features):
-        #     ff_out.append(self.phoneme_ff[i](x))
-        # # ff_out: (B, S, d_model) * 3 
+#         ff_out = []
+#         for i in range(self.num_features):
+#             ff_out.append(self.phoneme_ff[i](x))
+#         # ff_out: (B, S, d_model) * 3 
 
-        # ff_out = torch.stack(ff_out, -1)
-        # # ff_out: (B, S, d_model, 3)
+#         ff_out = torch.stack(ff_out, -1)
+#         # ff_out: (B, S, d_model, 3)
 
         ff_prj = []
         for i in range(self.num_features):
@@ -226,18 +223,18 @@ class ViPhoLM(nn.Module):
             x = self.decoder(x, memory, trg_causal_mask, \
                          trg_mask, memory_padding_mask_bool)
             x = x[:, -1:, :]
-            ff_out = []
-            for i in range(self.num_features):
-                ff_out.append(self.phoneme_ff[i](x))
-                # ff_out: (B, S, d_model) * 3 
+#             ff_out = []
+#             for i in range(self.num_features):
+#                 ff_out.append(self.phoneme_ff[i](x))
+#                 # ff_out: (B, S, d_model) * 3 
 
-            ff_out = torch.stack(ff_out, -1)
-            # ff_out: (B, S, d_model, 3)
+#             ff_out = torch.stack(ff_out, -1)
+#             # ff_out: (B, S, d_model, 3)
 
             ff_prj = []
             for i in range(self.num_features):
-                ff_prj.append(self.outs[i](ff_out[:, :, :, i]))
-            # ff_out: (B, S, vocab_size) * 3 
+                ff_prj.append(self.outs[i](x))
+            # ff_prj: (B, S, vocab_size) * 3 
             ff_prjout = torch.stack(ff_prj, -1)
             # ff_prjout: (B, S, vocab_size, 3)
             next_token = ff_prjout.argmax(dim=2)
@@ -250,28 +247,3 @@ class ViPhoLM(nn.Module):
         outputs = torch.cat(outputs, dim=1) # (1, S, 3)
 
         return outputs
-            
-            
-        
-            
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-    
-
-    
