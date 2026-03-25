@@ -1,0 +1,55 @@
+vocab:
+  type: MTVocab
+  TOKENIZER: null
+  bos_token: <bos>
+  eos_token: <eos>
+  unk_token: <unk>
+  pad_token: <pad>
+
+  vietnamese: 
+    path:
+      train: datasets/PhoMT/train.json
+      dev: datasets/PhoMT/dev.json
+      test: datasets/PhoMT/test.json
+  english: 
+    path: 
+      train: datasets/PhoMT/train.json
+      dev: datasets/PhoMT/dev.json
+      test: datasets/PhoMT/test.json
+    min_freq: 3
+
+dataset:
+  train: 
+    type: TransformerPhonemeTranslation
+    path: datasets/PhoMT/train.json
+  dev:
+    type: TransformerPhonemeTranslation
+    path: datasets/PhoMT/dev.json
+  test: 
+    type: TextSumDatasetPhonemeTranslation
+    path: datasets/PhoMT/test.json
+  batch_size: 32
+  num_workers: 32
+
+model:
+  name: Transformer_Phoneme_MT_Wikilingual
+  architecture: TransformerPhonemeTranslation
+  d_model: 512
+  n_layers: 6
+  head: 4
+  hidden_size: 512
+  ffn_hidden: 2048
+  drop_prob: 0.1
+  d_kv: 64
+  device: cuda
+
+
+training:
+  checkpoint_path: "checkpoints"
+  learning_rate: 0.15 
+  lr_coverage: 2
+  warmup: 2000
+  patience: 5
+  score: BLEU-4
+
+task: MachineTranslationTask # Đảm bảo khớp với tên @META_TASK.register() trong file task

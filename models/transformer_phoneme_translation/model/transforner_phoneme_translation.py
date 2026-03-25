@@ -1,0 +1,225 @@
+import torch
+from torch import nn
+from vocabs.vocab_translation import MTVocab
+from builders.model_builder import META_ARCHITECTURE
+from models.transformer_phoneme_translation.utils.clone import clones
+from models.transformer_phoneme_translation.utils.padding_mask import create_padding_mask, create_padding_mask_normal
+from models.transformer_phoneme_translation.utils.causal_mask import create_causal_mask
+from models.transformer_phoneme_translation.blocks.decoder_block import TransformerDecoderBlock
+from models.transformer_phoneme_translation.blocks.encoder_block import TransformerEncoderBlock
+from models.transformer_phoneme_translation.layers.phoneme_feed_forward import FeedForward
+from models.transformer_phoneme_translation.embedding.positional_embedding import PositionalEncoding
+
+@META_ARCHITECTURE.register()
+class TransformerPhonemeTranslation(nn.Module):
+    def __init__(self, config, vocab: MTVocab):
+        super().__init__()
+        self.vocab = vocab
+        self.d_model = config.d_model
+        self.MAX_LENGTH = config.inference_length
+        self.config = config
+
+        # Positional Encoding
+        self.PE = PositionalEncoding(self.d_model, max_len=self.config.max_len + 10)
+
+        # Encoder English 
+        self.num_features = 1
+        self.src_embedding = clones(nn.Embedding(vocab.english_vocab_size, config.d_model), self.num_features)
+        self.dropout = nn.Dropout(0.1)
+
+        self.encoder = TransformerEncoderBlock(config, self.vocab)
+
+        # Decoder Vietnamese
+        self.tgt_embedding = clones(nn.Embedding(vocab.vietnamese_vocab_size, config.d_model), self.num_features)
+        self.decoder = TransformerDecoderBlock(config, self.vocab)
+        self.phoneme_ff = clones(FeedForward(config), self.num_features)
+        self.outs = clones(nn.Linear(config.d_model, vocab.vietnamese_vocab_size), self.num_features)
+        self.losses = clones(nn.CrossEntropyLoss(ignore_index=vocab.unk_idx), self.num_features)
+
+    def forward(self, src, trg):
+        # src: (B, S)
+        # trg: (B, S, 3)
+
+        encoder_padding_mask = create_padding_mask_normal(src, 0)
+        B, S = src.shape
+
+        target = trg[:, 1:, :]
+        # target: (B, S - 1, 3) [4, 5, 8, ... <eos>]
+        
+        decoder_input = trg[:, :-1, :]
+        # decoder_input: (B, S - 1, 3) [<bos>, 3, 4, 5, 6, ...]
+    
+        # src: (B, S)
+        
+        # embeds = []
+        # for i in range(self.num_features):
+        #     embeds.append(self.dropout(self.src_embedding[i](src[:, :, i])))
+        # # embeds: (B, S, d_model) * 3 
+        # x = torch.cat(embeds, -1)
+        
+        x = self.dropout(self.src_embedding[0](src))
+        # x: (B, S, d_model)
+         
+        # Positional Encoding
+        x = self.PE(x)
+        # x: (B, S, d_model)
+        
+        # Encoder
+        memory = self.encoder(x, encoder_padding_mask) 
+        # memory: (B, S, d_model)
+
+
+        # Decoder
+        B, S, W = decoder_input.shape
+        decoder_padding_mask = create_padding_mask(decoder_input, 3)
+        decoder_causal_mask = create_causal_mask(S, self.config.device)
+
+        # decoder_input: (B, S, 3)
+        embeds = []
+        for i in range(self.num_features):
+            embeds.append(self.dropout(self.src_embedding[i](decoder_input[:, :, i])))
+        # embeds: (B, S, d_model) * 3 
+        x = torch.cat(embeds, -1)
+        # embeds: (B, S, d_model * 3)
+        # x: (B, S, d_model * 3)
+        x = self.linear(x)
+        # x: (B, S, d_model)
+         
+        # Positional Encoding
+        x = self.PE(x)
+        # x: (B, S, d_model)
+
+        x = self.decoder(x, memory, decoder_causal_mask, \
+                         decoder_padding_mask, encoder_padding_mask)
+        
+        ff_out = []
+        for i in range(self.num_features):
+            ff_out.append(self.phoneme_ff[i](x))
+        # ff_out: (B, S, d_model) * 3 
+
+        ff_out = torch.stack(ff_out, -1)
+        # ff_out: (B, S, d_model, 3)
+
+        ff_prj = []
+        for i in range(self.num_features):
+            ff_prj.append(self.outs[i](ff_out[:, :, :, i]))
+        # ff_out: (B, S, vocab_size) * 3 
+        ff_prjout = torch.stack(ff_prj, -1)
+        # ff_prjout: (B, S, vocab_size, 3)
+
+        loss_result = []
+
+        for i in range(self.num_features):
+            loss_result.append(
+                self.losses[i](
+                    ff_prjout[:, :, :, i].reshape(-1, self.vocab.vocab_size), 
+                    target[:, :, i].reshape(-1)
+                )
+            )
+        # loss_result: List [loss_initial, loss_rhyme, loss_tone]
+        total_loss = sum(loss_result)
+
+        return 0, total_loss 
+    
+    def predict(self, src):
+        # src: (B, S)
+
+        encoder_padding_mask = create_padding_mask_normal(src, 0)
+        B, S = src.shape
+        # src: (B, S)
+        
+        # embeds = []
+        # for i in range(self.num_features):
+        #     embeds.append(self.dropout(self.src_embedding[i](src[:, :, i])))
+        # # embeds: (B, S, d_model) * 3 
+        # x = torch.cat(embeds, -1)
+        
+        x = self.dropout(self.src_embedding[0](src))
+        # x: (B, S, d_model)
+         
+        # Positional Encoding
+        x = self.PE(x)
+        # x: (B, S, d_model)
+        
+        # Encoder
+        memory = self.encoder(x, encoder_padding_mask) 
+        # memory: (B, S, d_model)
+
+        # Decoder initialize 
+        # Initiate decoder's input [<BOS>, <PAD>, <PAD>]
+        decoder_input = torch.empty(B, 1, self.num_features, dtype=torch.long, device=self.config.device)
+        for i in range(self.num_features):
+            if i == 0: 
+                decoder_input[:, :, i].fill_(self.vocab.bos_idx)
+            else: 
+                decoder_input[:, :, i].fill_(self.vocab.pad_idx)
+        # decoder_input: (batch_size, 1, 3)
+
+        # Decoder running 
+        outputs = []
+        for _ in range(self.MAX_LENGTH): 
+            # embedding
+            embeds = []
+            for i in range(self.num_features):
+                embeds.append(self.dropout(self.tgt_embedding[i](decoder_input[:, :, i])))
+            x = torch.cat(embeds, -1)
+            x = self.linear(x)
+            # x: (B, S, hidden_size)
+            x = self.PE(x)
+
+            # Masking
+            trg_mask = create_padding_mask(decoder_input, 3)
+            trg_causal_mask = create_causal_mask(decoder_input.size(1), self.config.device)
+
+            x = self.decoder(x, memory, trg_causal_mask, \
+                         trg_mask, encoder_padding_mask)
+            x = x[:, -1:, :]
+            ff_out = []
+            for i in range(self.num_features):
+                ff_out.append(self.phoneme_ff[i](x))
+                # ff_out: (B, S, d_model) * 3 
+
+            ff_out = torch.stack(ff_out, -1)
+            # ff_out: (B, S, d_model, 3)
+
+            ff_prj = []
+            for i in range(self.num_features):
+                ff_prj.append(self.outs[i](ff_out[:, :, :, i]))
+            # ff_out: (B, S, vocab_size) * 3 
+            ff_prjout = torch.stack(ff_prj, -1)
+            # ff_prjout: (B, S, vocab_size, 3)
+            next_token = ff_prjout.argmax(dim=2)
+            # next_token: (1, 1, 3)
+            outputs.append(next_token)
+            decoder_input = torch.cat([decoder_input, next_token], dim = 1)
+
+            if B == 1 and next_token[:, -1, 0] == self.vocab.eos_idx:
+                break
+        outputs = torch.cat(outputs, dim=1) # (1, S, 3)
+
+        return outputs
+            
+            
+        
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    
+
+    
