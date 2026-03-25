@@ -33,7 +33,6 @@ class TransformerPhonemeTranslation(nn.Module):
         self.decoder = TransformerDecoderBlock(config, self.vocab)
 
         
-        # Tạo 3 bản sao cho các lớp tương ứng với 3 features
         self.tgt_embedding = clones(nn.Embedding(vocab.vietnamese_vocab_size, config.d_model), self.num_features)
         self.phoneme_ff = clones(FeedForward(config), self.num_features)
         self.outs = clones(nn.Linear(config.d_model, vocab.vietnamese_vocab_size), self.num_features)
@@ -42,6 +41,8 @@ class TransformerPhonemeTranslation(nn.Module):
     def forward(self, src, trg):
         # src: (B, S)
         # trg: (B, S, 3)
+        src = src[:, :self.config.max_len] # Cắt nếu dài quá giới hạn
+        trg = trg[:, :self.config.max_len]
 
         encoder_padding_mask = create_padding_mask_normal(src, 0)
         B, S = src.shape
@@ -126,28 +127,23 @@ class TransformerPhonemeTranslation(nn.Module):
     
     def predict(self, src):
         self.eval()
+        src = src[:, :self.config.max_len] # Cắt nếu dài quá giới hạn
         B = src.size(0)
         device = src.device
         
-        # 1. Encoder English
         encoder_padding_mask = create_padding_mask_normal(src, 0)
         x = self.dropout(self.src_embedding(src))
         x = self.PE(x)
         memory = self.encoder(x, encoder_padding_mask) 
 
-        # 2. Khởi tạo Decoder Input: (B, 1, 3)
         decoder_input = torch.full((B, 1, self.num_features), self.vocab.pad_idx, dtype=torch.long, device=device)
         decoder_input[:, 0, 0] = self.vocab.bos_idx 
         
-        # Biến theo dõi trạng thái kết thúc của từng câu trong Batch
-        # initial_finished: (B,) kiểu Boolean
         finished = torch.zeros(B, dtype=torch.bool, device=device)
         
-        # Danh sách lưu các token dự đoán để ghép lại sau cùng
         outputs = []
 
         for _ in range(self.MAX_LENGTH): 
-            # A. Embedding 3 features
             embeds = []
             for i in range(self.num_features):
                 embeds.append(self.dropout(self.tgt_embedding[i](decoder_input[:, :, i])))
@@ -156,15 +152,12 @@ class TransformerPhonemeTranslation(nn.Module):
             x = self.linear(x)
             x = self.PE(x)
 
-            # B. Masking (Sử dụng cột index chính để tạo padding mask)
-            trg_mask = create_padding_mask(decoder_input[:, :, 0], self.vocab.pad_idx)
+            trg_mask = create_padding_mask(decoder_input, 3)
             trg_causal_mask = create_causal_mask(decoder_input.size(1), device)
 
-            # C. Decoder Forward
             x = self.decoder(x, memory, trg_causal_mask, trg_mask, encoder_padding_mask)
             x_last = x[:, -1:, :] # (B, 1, d_model)
 
-            # D. Dự đoán 3 features song song
             ff_outs = []
             for i in range(self.num_features):
                 h = self.phoneme_ff[i](x_last)
@@ -174,22 +167,15 @@ class TransformerPhonemeTranslation(nn.Module):
             # next_token: (B, 1, 3)
             next_token = torch.stack(ff_outs, dim=-1).squeeze(2)
             
-            # E. Xử lý logic dừng cho B > 1
-            # Nếu một câu đã finished, các bước sau đó nên là PAD thay vì dự đoán bừa bãi
-            # (Tùy chọn: giúp output sạch hơn)
             if finished.any():
                 next_token[finished] = self.vocab.pad_idx
             
             outputs.append(next_token)
             
-            # Cập nhật trạng thái finished: nếu feature chính (0) là EOS
-            # next_token[:, 0, 0] lấy ra ID âm vị chính của step hiện tại
             finished |= (next_token[:, 0, 0] == self.vocab.eos_idx)
 
-            # F. Cập nhật decoder_input cho bước sau
             decoder_input = torch.cat([decoder_input, next_token], dim=1)
 
-            # ĐIỀU KIỆN DỪNG: Chỉ break khi TẤT CẢ các câu trong batch đều đã xong
             if finished.all():
                 break
         
