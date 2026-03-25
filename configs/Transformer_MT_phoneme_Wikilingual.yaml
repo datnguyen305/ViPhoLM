@@ -51,5 +51,6 @@ training:
   warmup: 2000
   patience: 5
   score: BLEU-4
+  seed: 42
 
 task: MachineTranslationTask # Đảm bảo khớp với tên @META_TASK.register() trong file task
