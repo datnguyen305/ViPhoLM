@@ -100,9 +100,10 @@ class MachineTranslationTask(BaseTask):
                     prediction = self.vocab.decode_batch_caption_vietnamese(prediction)
                     label = self.vocab.decode_sentence_english(input_english)
 
-                    id = items.id[0]
-                    gens[id] = prediction[0]
-                    gts[id] = label[0]
+                    for i in range(len(items.id)):
+                        curr_id = items.id[i]
+                        gens[curr_id] = prediction[i]
+                        gts[curr_id] = label[i]
 
                 pbar.update()
         
