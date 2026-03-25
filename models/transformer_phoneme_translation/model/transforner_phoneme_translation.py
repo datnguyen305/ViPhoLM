@@ -142,8 +142,8 @@ class TransformerPhonemeTranslation(nn.Module):
         finished = torch.zeros(B, dtype=torch.bool, device=device)
         
         outputs = []
-
-        for _ in range(self.MAX_LENGTH): 
+        safe_max_len = min(self.MAX_LENGTH, self.PE.pe.size(0) - 1)
+        for _ in range(safe_max_len): 
             embeds = []
             for i in range(self.num_features):
                 embeds.append(self.dropout(self.tgt_embedding[i](decoder_input[:, :, i])))
