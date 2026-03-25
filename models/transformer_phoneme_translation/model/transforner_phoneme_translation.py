@@ -30,6 +30,7 @@ class TransformerPhonemeTranslation(nn.Module):
         self.encoder = TransformerEncoderBlock(config, self.vocab)
 
         # Decoder Vietnamese
+        self.linear = nn.Linear(config.d_model * 3, config.d_model)
         self.tgt_embedding = clones(nn.Embedding(vocab.vietnamese_vocab_size, config.d_model), self.num_features)
         self.decoder = TransformerDecoderBlock(config, self.vocab)
         self.phoneme_ff = clones(FeedForward(config), self.num_features)
