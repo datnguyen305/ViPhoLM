@@ -20,13 +20,13 @@ vocab:
 
 dataset:
   train: 
-    type: TransformerPhonemeTranslation
+    type: MachineTranslationDataset
     path: datasets/PhoMT/train.json
   dev:
-    type: TransformerPhonemeTranslation
+    type: MachineTranslationDataset
     path: datasets/PhoMT/dev.json
   test: 
-    type: TextSumDatasetPhonemeTranslation
+    type: MachineTranslationDataset
     path: datasets/PhoMT/test.json
   batch_size: 32
   num_workers: 32
