@@ -36,14 +36,14 @@ class MachineTranslationTask(BaseTask):
         )
         self.dev_dataloader = DataLoader(
             dataset=self.dev_dataset,
-            batch_size=1,
+            batch_size=128,
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn
         )
         self.test_dataloader = DataLoader(
             dataset=self.test_dataset,
-            batch_size=1,
+            batch_size=128,
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn
@@ -83,34 +83,45 @@ class MachineTranslationTask(BaseTask):
         self.model.eval()
         gens = {}
         gts = {}
-        with tqdm(desc='Epoch %d - Evaluating' % (self.epoch+1), unit='it', total=len(dataloader)) as pbar:
+        processed_count = 0
+        max_test_samples = 50 
+
+        with tqdm(desc='Evaluating', unit='it', total=min(len(dataloader), 5)) as pbar:
             for items in dataloader:
+                if processed_count >= max_test_samples:
+                    break
+                    
                 items = items.to(self.device)
-
-
-                input_vietnamese = items.input_vietnamese
-                input_english = items.input_english
-
-
                 with torch.no_grad():
-                    prediction = self.model.predict(input_english)
-                    # input_english: (B, S_eng); Ex: [(<bos>, <pad>, <pad>), (<initiate>, <rhyme>, <tone>), (<eos>, <pad>, <pad>)]
-                    # prediction: (B, S_viet, 3)
+                    # Model dự đoán
+                    prediction = self.model.predict(items.input_english)
+                    
+                    # Giải mã toàn bộ batch
+                    decoded_preds = self.vocab.decode_batch_caption_vietnamese(prediction)
+                    # Lấy nhãn gốc tiếng Việt để tính BLEU chính xác
+                    decoded_labels = self.vocab.decode_batch_caption_vietnamese(items.input_vietnamese)
 
-                    prediction = self.vocab.decode_batch_caption_vietnamese(prediction)
-                    label = self.vocab.decode_sentence_english(input_english)
+                    # --- PHẦN IN DEBUG: CHỈ IN 1 CÂU DUY NHẤT CỦA CẢ QUÁ TRÌNH ---
+                    if processed_count == 0:
+                        tqdm.write("\n" + "="*30)
+                        tqdm.write(f"SAMPLE DEBUG:")
+                        tqdm.write(f"  - EN: {self.vocab.decode_sentence_english(items.input_english[0:1])[0]}")
+                        tqdm.write(f"  - GT: {decoded_labels[0]}")
+                        tqdm.write(f"  - PD: {decoded_preds[0]}")
+                        tqdm.write("="*30 + "\n")
 
+                    # Lưu 50 câu vào dict để tính điểm
                     for i in range(len(items.id)):
-                        curr_id = items.id[i]
-                        gens[curr_id] = prediction[i]
-                        gts[curr_id] = label[i]
+                        if processed_count >= max_test_samples: break
+                        idx = items.id[i]
+                        gens[idx] = decoded_preds[i]
+                        gts[idx] = decoded_labels[i]
+                        processed_count += 1
 
                 pbar.update()
-        
-        # Calculate metrics
-        self.logger.info("Getting scores")
-        scores = evaluation.compute_bleu_scores(gts, gens)
     
+        # Tính BLEU trên 50 câu
+        scores = evaluation.compute_bleu_scores(gts, gens)
         return scores, (gens, gts)
 
     def get_predictions(self):

@@ -3,7 +3,7 @@ from torch import nn
 from vocabs.vocab_translation import MTVocab
 from builders.model_builder import META_ARCHITECTURE
 from models.transformer_phoneme_translation.utils.clone import clones
-from models.transformer_phoneme_translation.utils.padding_mask import create_padding_mask, create_padding_mask_normal
+from models.transformer_phoneme_translation.utils.padding_mask import create_padding_mask
 from models.transformer_phoneme_translation.utils.causal_mask import create_causal_mask
 from models.transformer_phoneme_translation.blocks.decoder_block import TransformerDecoderBlock
 from models.transformer_phoneme_translation.blocks.encoder_block import TransformerEncoderBlock
@@ -44,7 +44,7 @@ class TransformerPhonemeTranslation(nn.Module):
         src = src[:, :self.config.max_len] # Cắt nếu dài quá giới hạn
         trg = trg[:, :self.config.max_len]
 
-        encoder_padding_mask = create_padding_mask_normal(src, 0)
+        encoder_padding_mask = create_padding_mask(src, 0)
         B, S = src.shape
 
         target = trg[:, 1:, :]
@@ -75,7 +75,7 @@ class TransformerPhonemeTranslation(nn.Module):
 
         # Decoder
         B, S, W = decoder_input.shape
-        decoder_padding_mask = create_padding_mask(decoder_input, 3)
+        decoder_padding_mask = create_padding_mask(decoder_input, 0)
         decoder_causal_mask = create_causal_mask(S, self.config.device)
 
         # decoder_input: (B, S, 3)
@@ -131,7 +131,7 @@ class TransformerPhonemeTranslation(nn.Module):
         B = src.size(0)
         device = src.device
         
-        encoder_padding_mask = create_padding_mask_normal(src, 0)
+        encoder_padding_mask = create_padding_mask(src, 0)
         x = self.dropout(self.src_embedding(src))
         x = self.PE(x)
         memory = self.encoder(x, encoder_padding_mask) 
@@ -152,7 +152,7 @@ class TransformerPhonemeTranslation(nn.Module):
             x = self.linear(x)
             x = self.PE(x)
 
-            trg_mask = create_padding_mask(decoder_input, 3)
+            trg_mask = create_padding_mask(decoder_input, 0)
             trg_causal_mask = create_causal_mask(decoder_input.size(1), device)
 
             x = self.decoder(x, memory, trg_causal_mask, trg_mask, encoder_padding_mask)

@@ -28,8 +28,8 @@ dataset:
   test: 
     type: MachineTranslationDataset
     path: datasets/PhoMT/test.json
-  batch_size: 32
-  num_workers: 32
+  batch_size: 16
+  num_workers: 16
 
 model:
   name: Transformer_Phoneme_MT_Wikilingual
@@ -41,15 +41,15 @@ model:
   ffn_hidden: 2048
   drop_prob: 0.1
   d_kv: 64
-  max_len: 2000
+  max_len: 128
   device: cuda
 
 
 training:
   checkpoint_path: "checkpoints"
-  learning_rate: 0.15 
+  learning_rate: 1
   lr_coverage: 2
-  warmup: 2000
+  warmup: 8000
   patience: 5
   score: BLEU-4
   seed: 42
