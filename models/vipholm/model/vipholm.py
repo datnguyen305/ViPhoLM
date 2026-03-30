@@ -167,6 +167,7 @@ class ViPhoLM(nn.Module):
             # embedding
             # decoder_input: (B, S, 3)
             embedded: torch.Tensor = self.embedding(decoder_input)
+            _, S, _, _ = embedded.shape
             # embedded: (B, S, 3, d_model)
             embedded = embedded.reshape(B, S, -1)
             # embedded: (B, S, 3*d_model)
@@ -187,7 +188,7 @@ class ViPhoLM(nn.Module):
             # ff_out: (B, S, vocab_size) * 3 
             ff_prjout = torch.stack(ff_prj, -2)
             # ff_prjout: (B, S, 3, vocab_size)
-            next_token = ff_prjout.argmax(dim=2)
+            next_token = ff_prjout.argmax(dim=-1)
             # next_token: (1, 1, 3)
             outputs.append(next_token)
             decoder_input = torch.cat([decoder_input, next_token], dim = 1)
