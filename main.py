@@ -26,7 +26,7 @@ def set_seed(seed=42):
 
 if __name__ == "__main__":
     config = get_config(config_file)
-    set_seed(config.training.seed)
+    # set_seed(config.training.seed)
 
     task = build_task(config)
     vocab = task.load_vocab(config.vocab)
