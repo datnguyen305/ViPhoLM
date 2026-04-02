@@ -21,44 +21,27 @@ class LSTM_Model_Phoneme(nn.Module):
         self.encoder = Encoder(config.encoder, vocab)
         self.decoder = Decoder(config.decoder, vocab)
         
-        self.losses = nn.ModuleList([
-            nn.CrossEntropyLoss() 
-            for _ in range(self.num_features)
-        ])
+        self.loss = nn.CrossEntropyLoss()
 
     def forward(self, x: torch.Tensor, labels: torch.Tensor):
         encoder_outs, hidden_states = self.encoder(x)
         # encoder_outs : (batch_size, seq_len, hidden_size * 3)
     
         outs, _ = self.decoder(encoder_outs, hidden_states, labels)
-        # decoder_outputs: (batch_size, target_len, vocab_size, 3)
-
-        loss_result = []
-
-        for i in range(self.num_features):
-            loss_result.append(
-                self.losses[i](
-                    outs[:, :, :, i].reshape(-1, self.vocab.vocab_size), 
-                    labels[:, :, i].reshape(-1)
-                )
-            )
-        # loss_result: (int)
-        total_loss = 0 
-        total_loss = sum(loss_result)
+        # decoder_outputs: (batch_size, target_len, 3, vocab_size)
+        B, L, _, vocab_size = outs.shape
+        outs = outs.reshape(B, 3*L, -1) # (B, 3*L, vocab_size)
+        loss = self.loss(outs.reshape(-1, vocab_size), labels)
     
-        return outs, total_loss
+        return outs, loss
     
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         encoder_outputs, encoder_states = self.encoder(x)
         batch_size = encoder_outputs.size(0)
 
-        # Initiate decoder's input [<BOS>, <PAD>, <PAD>]
+        # Initiate decoder's input [<BOS>, <BOS>, <BOS>]
         decoder_input = torch.empty(batch_size, 1, self.num_features, dtype=torch.long, device=self.config.device)
-        for i in range(self.num_features):
-            if i == 0: 
-                decoder_input[:, :, i].fill_(self.vocab.bos_idx)
-            else: 
-                decoder_input[:, :, i].fill_(self.vocab.pad_idx)
+        decoder_input.fill_(self.vocab.bos_idx)
         # decoder_input: (batch_size, 1, 3)
 
         decoder_hidden, decoder_memory = encoder_states
@@ -68,13 +51,11 @@ class LSTM_Model_Phoneme(nn.Module):
         outputs = []
         target_len = self.vocab.max_sentence_length
 
-        for i in range(target_len):
+        for _ in range(target_len):
             decoder_output, (decoder_hidden, decoder_memory) = self.decoder.forward_step(decoder_input, (decoder_hidden, decoder_memory))
-            # decoder_output: (batch_size, 1, vocab_size, 3)
+            # decoder_output: (batch_size, 1, 3, vocab_size)
 
-            decoder_output.reshape(batch_size, 1, self.vocab.vocab_size, -1)
-            # decoder_output: (batch_size, 1, vocab_size, 3)
-            decoder_input = decoder_output.argmax(dim=2)
+            decoder_input = decoder_output.argmax(dim=-1)
             # decoder_input: (batch_size, 1, 3)
             outputs.append(decoder_input)
             # outputs: (batch_size, 1, 3) * seq_length
@@ -84,5 +65,6 @@ class LSTM_Model_Phoneme(nn.Module):
         
         outputs = torch.cat(outputs, dim=1)
         # outputs: (batch_size, seq_len, 3)
+
         return outputs
     
