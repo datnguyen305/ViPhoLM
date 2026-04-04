@@ -94,6 +94,7 @@ class Decoder(nn.Module):
             vocab_logits = self.vocab_linear(self.attention_dense(torch.cat((decoder_outputs, context), dim=-1)))
             vocab_dist = F.softmax(vocab_logits, dim=-1)  # B x 1 x vocab_size
 
+
             if self.is_pgen:
                 p_gen_input = torch.cat((context, decoder_outputs, x), dim=-1)  # B x 1 x (256 + 256 + 128)
                 p_gen = torch.sigmoid(self.p_gen_linear(p_gen_input))  # B x 1 x 1

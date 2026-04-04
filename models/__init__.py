@@ -22,3 +22,4 @@ from .lstm_phoneme.model.lstm_phoneme import LSTM_Model_Phoneme
 from .bilstm_phoneme.bilstm_phoneme import BiLSTM_Model_Phoneme
 from .transformer_phoneme.model.transforner_phoneme import TransformerPhoneme
 from .vipholm.model.vipholm import ViPhoLM
+from .transformer_pointer.model.transformer_pointer import TransformerPointer
