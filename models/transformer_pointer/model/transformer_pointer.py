@@ -28,6 +28,8 @@ class TransformerPointer(nn.Module):
         self.d_model = config.d_model
         self.MAX_LENGTH = vocab.max_sentence_length + 2 # 2 for <bos> + <eos>
         self.config = config
+        self.src_max_len = 1024
+        self.tgt_max_len = 1024
         
         # Encoder 
         "encoder input: (B, S_src)"
@@ -64,6 +66,9 @@ class TransformerPointer(nn.Module):
                 
         
     def forward(self, src, trg, extended_source_idx, extra_zeros):
+        src = src[:, :self.src_max_len]
+        tgt = tgt[:, :self.tgt_max_len]
+        
         B, S_src = src.shape
         # src: (B, S_src)
         # trg: (B, S_trg)
