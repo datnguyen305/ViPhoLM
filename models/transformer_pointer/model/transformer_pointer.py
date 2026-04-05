@@ -170,7 +170,8 @@ class TransformerPointer(nn.Module):
         
         if coverage_loss is not None:
             mask = (target_ids != 0).float()
-            avg_coverage_loss = (coverage_loss * mask).sum() / mask.sum()
+            mask_sum = mask.sum()
+            avg_coverage_loss = (coverage_loss * mask).sum() / (mask_sum if mask_sum > 0 else 1.0)
             total_loss = nll_loss + self.config.lambda_cov * avg_coverage_loss
 
         return None, total_loss
