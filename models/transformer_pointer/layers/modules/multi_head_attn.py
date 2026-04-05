@@ -25,7 +25,7 @@ class ScaledDotProductAttention(nn.Module):
         att = torch.matmul(q, k) / np.sqrt(self.d_kv)  # (b_s, h, nq, nk)
         if attention_mask is not None:
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
-            att.masked_fill(attention_mask == 0, -1e4)
+            att.masked_fill_(attention_mask == 0, -1e4)
         att = torch.softmax(att, dim=-1)
         att = att * group_prob
         output = torch.matmul(att, v).permute(0, 2, 1, 3).reshape(b_s, -1, self.d_model)
