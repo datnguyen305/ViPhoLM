@@ -224,7 +224,7 @@ class TransformerPointer(nn.Module):
         input_for_src = src.clone()
         input_for_src[input_for_src >= self.vocab.vocab_size] = self.vocab.unk_idx
         
-        encoder_padding_mask = create_padding_mask(src, self.vocab.padding_idx)
+        encoder_padding_mask = create_padding_mask(src, 0)
         enc_mask_4d = encoder_padding_mask.unsqueeze(1).unsqueeze(1)
         memory, _ = self.encoder(input_for_src, enc_mask_4d, self.PE)
         
@@ -241,7 +241,7 @@ class TransformerPointer(nn.Module):
             S_trg = decoder_input.size(1)
             
             # 3.1. Chuẩn bị mask
-            decoder_padding_mask = create_padding_mask(decoder_input, self.vocab.padding_idx)
+            decoder_padding_mask = create_padding_mask(decoder_input, 0)
             decoder_causal_mask = create_causal_mask(S_trg, device)
             
             # XỬ LÝ OOV: Tránh lỗi Index Out of Bounds khi đưa qua lớp Embedding
@@ -295,7 +295,7 @@ class TransformerPointer(nn.Module):
             next_token = vocab_dist.argmax(dim=-1) # (B, 1)
             
             # Nếu câu đã xong (gặp EOS trước đó), ép token tiếp theo thành PAD
-            next_token = next_token.masked_fill(is_finished.unsqueeze(1), self.vocab.padding_idx)
+            next_token = next_token.masked_fill(is_finished.unsqueeze(1), 0)
             
             outputs.append(next_token)
             
