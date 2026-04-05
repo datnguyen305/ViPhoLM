@@ -67,6 +67,19 @@ class TransformerPointer(nn.Module):
         
     def forward(self, src, trg, extended_source_idx, extra_zeros):
         
+        max_src_len = 1024
+        max_trg_len = 1024
+        
+        # Nếu câu nguồn dài hơn mức cho phép -> Cắt cụt phần đuôi
+        if src.size(1) > max_src_len:
+            src = src[:, :max_src_len]
+            # BẮT BUỘC phải cắt extended_source_idx y hệt như src để giữ đồng bộ vị trí OOV
+            extended_source_idx = extended_source_idx[:, :max_src_len]
+            
+        # Nếu câu đích dài hơn mức cho phép -> Cắt cụt phần đuôi
+        if trg.size(1) > max_trg_len:
+            trg = trg[:, :max_trg_len]
+        # ========================================================
         
         
         B, S_src = src.shape
