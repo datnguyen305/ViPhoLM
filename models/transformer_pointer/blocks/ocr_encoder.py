@@ -14,7 +14,7 @@ class OCREncoder(nn.Module):
                 self.config.d_model, self.config.d_kv, \
                 self.config.d_ff) \
                 , 3 
-            ) # n_layer is adjustable
+            )
         self.norm = nn.LayerNorm(self.config.d_model)
 
     def forward(self, input: torch.Tensor, \

@@ -137,7 +137,11 @@ class TransformerPointer(nn.Module):
             # extended_vocab_dist: (B, S_trg, vocab_size + max_oovs)
             
             attn_dist_ = decoder_attn_weights * (1 - p_gen) # (B, S_trg, S_src)
-            index = extended_source_idx.unsqueeze(1).expand(-1, S_trg, -1)
+            max_vocab_limit = extended_vocab_dist.size(-1) - 1
+            safe_extended_idx = torch.clamp(extended_source_idx, max=max_vocab_limit)
+            
+            # Sử dụng safe_extended_idx thay vì extended_source_idx gốc
+            index = safe_extended_idx.unsqueeze(1).expand(-1, S_trg, -1)
             
             vocab_dist = extended_vocab_dist.scatter_add(dim = 2, index = index, src=attn_dist_)
             

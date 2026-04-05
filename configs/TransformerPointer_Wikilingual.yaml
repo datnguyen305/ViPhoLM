@@ -37,7 +37,7 @@ model:
     head: 8 
     d_model: 512
     d_kv: 64 
-    d_ff: 3072
+    d_ff: 2048
     device: cpu
   decoder:
     d_model: 512
