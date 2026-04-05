@@ -28,8 +28,8 @@ class TransformerPointer(nn.Module):
         self.d_model = config.d_model
         self.MAX_LENGTH = vocab.max_sentence_length + 2 # 2 for <bos> + <eos>
         self.config = config
-        self.src_max_len = 1024
-        self.trg_max_len = 1024
+        self.src_max_len = 400
+        self.trg_max_len = 420
         
         # Encoder 
         "encoder input: (B, S_src)"
