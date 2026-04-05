@@ -252,6 +252,8 @@ class TransformerPointer(nn.Module):
             embeds = self.tgt_embedding(dec_input_for_embed)
             x = self.PE(embeds)
             
+            enc_mask_4d = enc_mask_4d.squeeze(1).squeeze(1)
+            
             decoder_output, decoder_attn_weights = self.decoder(
                 x, memory, decoder_causal_mask, decoder_padding_mask, enc_mask_4d
             )
