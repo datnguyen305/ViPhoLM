@@ -71,13 +71,16 @@ class TransformerPointer(nn.Module):
         target = trg[:, 1:]
         # target: (B, S_trg - 1) [0, 1, 2, ... <eos>]
         
+        input_for_embed = src.clone()
+        input_for_embed[input_for_embed >= self.word_embed.num_embeddings] = 3
+        
         "Encoder"
         encoder_padding_mask = create_padding_mask(src, 0)
         # encoder_padding_mask: (B, S_src)
         encoder_padding_mask = encoder_padding_mask.unsqueeze(1).unsqueeze(1)
         
         assert encoder_padding_mask.ndim == 4, f"Expected 4D tensor but got {encoder_padding_mask.ndim}D"
-        memory, _ = self.encoder(src, encoder_padding_mask, self.PE)
+        memory, _ = self.encoder(input_for_embed, encoder_padding_mask, self.PE)
         
         "Decoder"
         # Initial required params
@@ -176,6 +179,7 @@ class TransformerPointer(nn.Module):
         self.eval()
         B, S_src = src.shape
         device = self.config.device
+        
         
         # 1. Encoder Pass (Tính 1 lần duy nhất)
         encoder_padding_mask = create_padding_mask(src, self.vocab.padding_idx)
