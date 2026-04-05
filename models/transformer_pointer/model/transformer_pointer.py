@@ -66,8 +66,6 @@ class TransformerPointer(nn.Module):
                 
         
     def forward(self, src, trg, extended_source_idx, extra_zeros):
-        src = src[:self.src_max_len] 
-        extended_source_idx = extended_source_idx[:self.src_max_len]
         
         
         
@@ -77,7 +75,6 @@ class TransformerPointer(nn.Module):
         
         target = trg[:, 1:]
         # target: (B, S_trg - 1) [0, 1, 2, ... <eos>]
-        target = target[:self.trg_max_len]
         
         input_for_src = src.clone()
         input_for_src[input_for_src >= self.vocab.vocab_size] = 3
