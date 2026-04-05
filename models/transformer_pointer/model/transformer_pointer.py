@@ -98,7 +98,7 @@ class TransformerPointer(nn.Module):
         encoder_padding_mask = encoder_padding_mask.squeeze(1).squeeze(1)
         
         # Embedding decoder_input
-        embeds = self.tgt_embedding(decoder_input)
+        embeds = self.tgt_embedding(input_for_decoder)
         # Positional embeds
         x = self.PE(embeds)
         # x: (B, S_trg, d_model)
