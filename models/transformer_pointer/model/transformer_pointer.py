@@ -66,7 +66,7 @@ class TransformerPointer(nn.Module):
                 
         
     def forward(self, src, trg, extended_source_idx, extra_zeros):
-        input_ids = input_ids[:self.src_max_len] 
+        src = src[:self.src_max_len] 
         extended_source_idx = extended_source_idx[:self.src_max_len]
         
         
