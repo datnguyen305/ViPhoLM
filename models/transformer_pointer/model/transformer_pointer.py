@@ -163,8 +163,14 @@ class TransformerPointer(nn.Module):
         log_probs = torch.log(vocab_dist + 1e-9)
         target_ids = trg[:, 1:]
         
+        max_prob_idx = log_probs.size(-1) - 1
+        
+        # 1. Ép tất cả target_ids không được vượt trần (max) và không được âm (min)
+        safe_target_ids = torch.clamp(target_ids, min=0, max=max_prob_idx)
+        
+        # Tính loss với target an toàn
         nll_loss = F.nll_loss(log_probs.view(-1, log_probs.size(-1)), 
-                              target_ids.reshape(-1), 
+                              safe_target_ids.reshape(-1), 
                               ignore_index=0)
         
         total_loss = nll_loss
