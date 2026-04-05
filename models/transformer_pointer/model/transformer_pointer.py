@@ -72,7 +72,7 @@ class TransformerPointer(nn.Module):
         # target: (B, S_trg - 1) [0, 1, 2, ... <eos>]
         
         input_for_embed = src.clone()
-        input_for_embed[input_for_embed >= self.word_embed.num_embeddings] = 3
+        input_for_embed[input_for_embed >= self.vocab.vocab_size] = 3
         
         "Encoder"
         encoder_padding_mask = create_padding_mask(src, 0)
