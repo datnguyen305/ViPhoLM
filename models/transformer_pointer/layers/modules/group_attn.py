@@ -20,7 +20,6 @@ class GroupAttention(nn.Module):
         a = torch.diag(torch.ones(seq_len - 1), 1).long().to(context.device)
         b = torch.diag(torch.ones(seq_len), 0).long().to(context.device)
         c = torch.diag(torch.ones(seq_len - 1), -1).long().to(context.device)
-        print("Logical thành công")
 
         mask = torch.logical_and(eos_mask, (a+c))
         

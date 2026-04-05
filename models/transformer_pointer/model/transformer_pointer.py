@@ -88,6 +88,7 @@ class TransformerPointer(nn.Module):
         _, S_trg = decoder_input.shape
         decoder_padding_mask = create_padding_mask(decoder_input, 0) # decoder_padding: (B, S_trg, d_model)
         decoder_causal_mask = create_causal_mask(S_trg, self.config.device)
+        encoder_padding_mask = encoder_padding_mask.squeeze(1).squeeze(1)
         
         # Embedding decoder_input
         embeds = self.tgt_embedding(decoder_input)
