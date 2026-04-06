@@ -2,6 +2,7 @@ from typing import List
 from utils.instance import Instance, InstanceList
 from .text_sum_dataset import TextSumDataset
 from .text_sum_dataset_bpe import TextSumDatasetBPE
+from .text_sum_dataset_unilm import TextSumDatasetUniLM
 import torch
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
