@@ -63,7 +63,22 @@ class TransformerPointer(nn.Module):
         """
         if config.p_gen:
             self.p_generator = P_gen(self.config)
+            
+        # Init_weights
+        self.apply(self._init_weights)
                 
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0.0)
+                
+        elif isinstance(module, nn.Embedding):
+            nn.init.xavier_uniform_(module.weight)
+            
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.constant_(module.weight, 1.0)
+            nn.init.constant_(module.bias, 0.0)
         
     def forward(self, src, trg, extended_source_idx, extra_zeros):
         

@@ -30,7 +30,7 @@ class OCREncoder(nn.Module):
         break_probs = []
         x = self.word_embed(input)
         # x: (B, S, H)
-        x = PE(x)
+        x = PE(x) 
         # x: (B, S, H)
         
         group_prob = 0.0
