@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
 import json
 import torch
+from vocabs.utils import preprocess_sentence
 from builders.dataset_builder import META_DATASET
 from utils.instance import Instance
 from vocabs.vocab import Vocab
@@ -19,6 +20,8 @@ class TextSumDatasetUniLM(Dataset):
         return len(self._data)
 
     def __getitem__(self, index: int) -> Instance:
+        MAX_SRC = 512
+        MAX_TRG = 128
         key = self._keys[index]
         item = self._data[key]
         
@@ -26,7 +29,13 @@ class TextSumDatasetUniLM(Dataset):
         paragraphs = [" ".join(paragraph) for _, paragraph in paragraphs.items()]
         source = "<nl>".join(paragraphs) # new line mark
         target = item["target"]
-
+        
+        source = preprocess_sentence(source)
+        target = preprocess_sentence(target)
+        
+        source = source[:MAX_SRC]
+        target = target[:MAX_TRG]
+        
         dict_source = {"source": source}
         dict_target = {"target": target}
 

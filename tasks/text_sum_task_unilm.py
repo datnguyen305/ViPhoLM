@@ -61,7 +61,7 @@ class TextSumTaskUniLM(BaseTask):
                 items = items.to(self.device)
                 # forward pass
                 input_ids = items.input_ids
-                input_type_ids = items.input_type_id
+                input_type_ids = items.input_type_ids
                 labels = items.labels
                 src_len = items.src_len
                 

@@ -18,15 +18,15 @@ dataset:
   train: 
     type: TextSumDatasetUniLM
     path: datasets/Wikilingual-dataset/train.json
-    input_type: seq2seq
+    input_type: bert
   dev:
     type: TextSumDatasetUniLM
     path: datasets/Wikilingual-dataset/dev.json
-    input_type: seq2seq
+    input_type: bert
   test: 
     type: TextSumDatasetUniLM
     path: datasets/Wikilingual-dataset/test.json
-    input_type: seq2seq
+    input_type: bert
   batch_size: 16
   num_workers: 16
 
@@ -56,4 +56,4 @@ training:
   patience: 5
   score: rouge-L
 
-task: TextSumTask
+task: TextSumTaskUniLM
