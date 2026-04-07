@@ -1,0 +1,17 @@
+from torch import nn 
+import torch 
+import torch.nn.functional as F
+
+class PositionwiseFeedForward(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.linear1 = nn.Linear(config.hidden_size, config.ffn_hidden)
+        self.linear2 = nn.Linear(config.ffn_hidden, config.hidden_size)
+        self.dropout = nn.Dropout(config.drop_prob)
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = F.gelu(x)
+        x = self.dropout(x)
+        x = self.linear2(x)
+        return x

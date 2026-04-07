@@ -35,7 +35,7 @@ class UniLM_Vocab(object):
         self.unk_idx = 3 
         
     def make_vocab(self, config):
-        
+        self.max_input_length = 0
         self.max_sentence_length = 0
         self.sentences_for_fasttext = []
         counter = Counter()
@@ -64,8 +64,12 @@ class UniLM_Vocab(object):
                 counter.update(fragmented_target)
                 self.sentences_for_fasttext.append(fragmented_target)
                 
-                if self.max_sentence_length < len(target):
-                    self.max_sentence_length = len(target)
+                total_input_len = len(fragmented_source) + len(fragmented_target)
+                
+                if self.max_sentence_length < len(fragmented_target):
+                    self.max_sentence_length = len(fragmented_target)
+                if self.max_sentence_length < total_input_len:
+                    self.max_input_length = total_input_len
                 
         min_freq = max(config.min_freq, 1)
         

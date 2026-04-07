@@ -20,3 +20,4 @@ from .transformer_phoneme.testing import Testing
 from .bottom_up.content_selector import ContentSelector
 from .lstm_bpe.lstm_bpe import LSTM_Model_BPE
 from .transformer_bpe.transformer_bpe import TransformerModel_BPE
+from .unilm.unilm import UniLM
