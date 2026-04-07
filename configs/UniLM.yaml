@@ -36,6 +36,7 @@ model:
   hidden_size: 512
   n_layers: 6
   head: 8
+  d_kv: 64
   ffn_hidden: 2048
   drop_prob: 0.1
   max_len: 1024

@@ -57,7 +57,7 @@ class UniLM(nn.Module):
         "FORWARD PASS"
         embeddings = self.token_prj(input_embedding)  * math.sqrt(self.config.d_model) + segment_embedding + pos_embedding
         embeddings = self.dropout(embeddings)
-        logits = self.big_block(embeddings, attention_mask=attention_mask)
+        logits = self.big_block(embeddings, attention_mask)
         # logits: (B, S_total, d_model)
         
         output = self.out(logits) 
@@ -82,42 +82,67 @@ class UniLM(nn.Module):
         return None, loss
     
     def predict(self, input_ids, input_type_ids, src_len):
+        """
+        input_ids: (B, S_src) - Câu gốc (đã có <bos>, <eos>)
+        input_type_ids: (B, S_src) - Thường là toàn 0
+        src_len: (B,) - Độ dài thực tế của source
+        """
+        self.eval()
         B = input_ids.size(0)
         device = input_ids.device
-        generated_ids = input_ids.clone()
-        generated_type_ids = input_type_ids.clone()
+        
+        # 1. Bắt đầu với input_ids (Source)
+        # Thông thường UniLM sẽ bắt đầu sinh ngay sau token <eos> của source
+        curr_ids = input_ids.clone() 
+        curr_type_ids = input_type_ids.clone()
 
-        for step in range(self.MAX_TARGET_LENGTH):
-            attention_mask = self._generate_seq2seq_mask(generated_ids, src_len)
-            token_emb = self.token_emb(generated_ids)
+        results = []
+
+        for _ in range(self.MAX_TARGET_LENGTH):
+            if curr_ids.size(1) >= self.MAX_INPUT_LENGTH:
+                break
+            # Cập nhật mask dựa trên độ dài hiện tại
+            # Lưu ý: src_len ở đây là độ dài cố định của phần Source ban đầu
+            attention_mask = self._generate_seq2seq_mask(curr_ids, src_len)
+            
+            # Embedding logic
+            token_emb = self.token_emb(curr_ids)
             token_emb = self.token_prj(token_emb)
 
-            pos_ids = torch.arange(generated_ids.size(1), device=device).unsqueeze(0)
+            # Positional Encoding phải khớp với chiều dài curr_ids
+            pos_ids = torch.arange(curr_ids.size(1), device=device).unsqueeze(0)
             pos_emb = self.pos_emb(pos_ids)
-
-            seg_emb = self.segment_emb(generated_type_ids)
+            
+            seg_emb = self.segment_emb(curr_type_ids)
 
             embeddings = token_emb * math.sqrt(self.config.d_model) + pos_emb + seg_emb
             embeddings = self.dropout(embeddings)
 
- 
-            hidden = self.big_block(embeddings, attention_mask=attention_mask)
-            logits = self.out(hidden)  # (B, S, V)
+            # Forward qua Transformer
+            # Nhớ truyền attn_mask=attention_mask (như đã sửa ở bước trước)
+            hidden = self.big_block(embeddings, attention_mask)
+            logits = self.out(hidden)  # (B, S_total, V)
 
-            next_token_logits = logits[:, -1, :]  # (B, V)
-            next_token = torch.argmax(next_token_logits, dim=-1)  # (B,)
+            # Chỉ lấy logits của token cuối cùng để dự đoán token tiếp theo
+            next_token_logits = logits[:, -1, :] 
+            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True) # (B, 1)
 
-            next_token = next_token.unsqueeze(1)  # (B, 1)
+            # Lưu token vừa sinh ra
+            results.append(next_token)
 
-            generated_ids = torch.cat([generated_ids, next_token], dim=1)
-
-            next_type = torch.ones((B, 1), dtype=torch.long, device=device)
-            generated_type_ids = torch.cat([generated_type_ids, next_type], dim=1)
+            # Cập nhật input cho bước tiếp theo
+            curr_ids = torch.cat([curr_ids, next_token], dim=1)
             
+            # Token mới thuộc Segment 1 (Target)
+            next_type = torch.ones((B, 1), dtype=torch.long, device=device)
+            curr_type_ids = torch.cat([curr_type_ids, next_type], dim=1)
+
+            # Dừng nếu tất cả các câu trong batch đều gặp <eos>
             if (next_token == self.vocab.eos_idx).all():
                 break
 
-        return generated_ids
+        # Kết quả trả về thường chỉ là phần được sinh ra (không bao gồm source)
+        return torch.cat(results, dim=1)
     
     
         

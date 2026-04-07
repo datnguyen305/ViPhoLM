@@ -68,7 +68,7 @@ class UniLM_Vocab(object):
                 
                 if self.max_sentence_length < len(fragmented_target):
                     self.max_sentence_length = len(fragmented_target)
-                if self.max_sentence_length < total_input_len:
+                if self.max_input_length < total_input_len:
                     self.max_input_length = total_input_len
                 
         min_freq = max(config.min_freq, 1)
@@ -117,15 +117,13 @@ class UniLM_Vocab(object):
     def vocab_size(self) -> int:
         return len(self.itos)
     
-    def encode_sentence(self, sentence: str, type: str) -> torch.Tensor:
+    def encode_sentence(self, sentence: List[str], type: str) -> torch.Tensor:
         """ 
         Turn a sentence into a vector of indices and a sentence length
         Returns: 
             source: <bos> sentence_idx <eos>
             target: sentence_idx <eos>
-        """
-        sentence = preprocess_sentence(sentence)
-        
+        """    
         if type == "source":
             vec = [self.bos_idx] + [self.stoi[token] if token in self.stoi else self.unk_idx for token in sentence] + [self.eos_idx]
             vec = torch.Tensor(vec).long()

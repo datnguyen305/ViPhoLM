@@ -36,14 +36,14 @@ class TextSumTaskUniLM(BaseTask):
         )
         self.dev_dataloader = DataLoader(
             dataset=self.dev_dataset,
-            batch_size=1,
+            batch_size=32,
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn
         )
         self.test_dataloader = DataLoader(
             dataset=self.test_dataset,
-            batch_size=1,
+            batch_size=32,
             shuffle=True,
             num_workers=config.dataset.num_workers,
             collate_fn=collate_fn
@@ -86,14 +86,15 @@ class TextSumTaskUniLM(BaseTask):
         with tqdm(desc='Epoch %d - Evaluating' % (self.epoch+1), unit='it', total=len(dataloader)) as pbar:
             for items in dataloader:
                 items = items.to(self.device)
-                predict_ids = items.encoded_source
-                predict_type_ids = items.encoded_source_type
+                predict_ids = items.predict_ids
+                predict_type_ids = items.predict_type_ids
+                target_ids = items.target_ids
                 src_len = items.src_len
                 with torch.no_grad():
                     prediction = self.model.predict(predict_ids, predict_type_ids, src_len)
                     prediction = self.vocab.decode_sentence(prediction)
                     
-                    label = self.vocab.decode_sentence(predict_ids)
+                    label = self.vocab.decode_sentence(target_ids)
 
                     id = items.id[0]
                     gens[id] = prediction[0]

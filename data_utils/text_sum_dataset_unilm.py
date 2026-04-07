@@ -4,11 +4,11 @@ import torch
 from vocabs.utils import preprocess_sentence
 from builders.dataset_builder import META_DATASET
 from utils.instance import Instance
-from vocabs.vocab import Vocab
+from vocabs.unilm_vocab import UniLM_Vocab
 
 @META_DATASET.register()
 class TextSumDatasetUniLM(Dataset):
-    def __init__(self, config, vocab: Vocab) -> None:
+    def __init__(self, config, vocab: UniLM_Vocab) -> None:
         super().__init__()
         self.config = config
         path: str = config.path
@@ -83,7 +83,8 @@ class TextSumDatasetUniLM(Dataset):
                 labels = labels,    
                 src_len = torch.tensor([src_len]),
                 predict_ids = encoded_source,
-                predict_type_ids = encoded_source_type
+                predict_type_ids = encoded_source_type,
+                target_ids = encoded_target
             )
         elif self.config.input_type == "seq2seq":
             return Instance(
