@@ -11,6 +11,8 @@ class Hierarchy_Vocab(Vocab):
     def __init__(self, config):
         self.initialize_special_tokens(config)
         self.make_vocab(config)
+        self.max_words = config.max_words
+        self.max_sentences = config.max_sentences
     
     def initialize_special_tokens(self, config) -> None:
         self.pad_token = config.pad_token 
@@ -24,10 +26,7 @@ class Hierarchy_Vocab(Vocab):
         self.bos_idx = 1
         self.eos_idx = 2
         self.unk_idx = 3
-    
-    """
-        Ready
-    """
+        
     def make_vocab(self, config):
         json_dirs = [config.path.train, config.path.dev, config.path.test]
         counter = Counter()
@@ -69,16 +68,10 @@ class Hierarchy_Vocab(Vocab):
         self.itos = {i: tok for i, tok in enumerate(itos)}
         self.stoi = {tok: i for i, tok in enumerate(itos)}
     
-    """
-        Ready
-    """
     @property
     def vocab_size(self) -> int:
         return len(self.stoi)
-    
-    """
-        Ready - hopefully
-    """
+
     def encode_document(self, document: List[str], max_doc_len = 40, max_sent_len = 40) -> List[torch.Tensor]:
         """
         document: list of sentences (strings)

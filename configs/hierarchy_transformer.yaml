@@ -26,47 +26,14 @@ dataset:
   num_workers: 16
 
 model:
-  name: EnhancedAttnTransformerModel_Wikilingual
-  architecture: EnhancedAttnTransformerModel
-  hidden_size: 512
-  d_model: 512 
+  name: Hierachy_Transformer_Wikilingual
+  architecture: Hierachy_Transformer
   max_sentences: 20
+  d_model: 512 
+  n_layers: 6
+  n_head: 8
+  dropout: 0.1
   device: cpu
-
-  encoder_enhanced: 
-    n_layers: 6
-    n_head: 8
-    head: 8        
-    d_model: 512   
-    hidden_size: 512
-    ffn_hidden: 2048
-    drop_prob: 0.1
-    dropout: 0.1   
-    d_kv: 64 
-  
-  encoder_standard:
-    n_layers: 6
-    n_head: 8
-    head: 8        
-    d_model: 512   
-    hidden_size: 512
-    ffn_hidden: 2048
-    drop_prob: 0.1
-    dropout: 0.1   
-    d_kv: 64       
-
-  decoder:
-    n_layers: 6
-    n_head: 8
-    head: 8        
-    d_model: 512
-    hidden_size: 512
-    ffn_hidden: 2048
-    drop_prob: 0.1
-    dropout: 0.1
-    d_kv: 64       
-
-  label_smoothing: 0.1
 
 training:
   checkpoint_path: "checkpoints"

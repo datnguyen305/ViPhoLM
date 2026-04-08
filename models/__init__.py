@@ -22,3 +22,4 @@ from .lstm_phoneme.lstm_phoneme import LSTM_Model_Phoneme
 from .bilstm_phoneme.bilstm_phoneme import BiLSTM_Model_Phoneme
 from .viword_transformer.model import ViWordTransformerModel
 from .enhanced_attn_transformer.model.enhanced_attn_transformer import EnhancedAttnTransformerModel
+from .enhanced_attn_transformer.model.hierachy_model import Hierachy_Transformer

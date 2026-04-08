@@ -31,14 +31,14 @@ class TextSumDatasetHierarchy(Dataset):
         paragraphs = item["source"]
         document = [s for paragraph in paragraphs.values() for s in paragraph]
 
-        sentence_tensors = self._vocab.encode_document(document, max_doc_len = self.MAX_SENTS, max_sent_len = self.MAX_SENTENCE_LENGTH)
+        sentence_tensors = self._vocab.encode_document(document)
 
         target = item["target"]
         encoded_target = self._vocab.encode_sentence(target)
 
         return Instance(
             id=key,
-            input_ids=sentence_tensors,
+            input_ids=sentence_tensors, # input_ids: (B, S, W)
             label=encoded_target,
             shifted_right_label=encoded_target[1:],
         )
