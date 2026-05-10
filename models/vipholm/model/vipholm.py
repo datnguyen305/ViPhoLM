@@ -157,8 +157,14 @@ class ViPhoLM(nn.Module):
             # ==========================================
             # 1. ENCODER PASS (Chỉ chạy 1 lần)
             # ==========================================
-            # Cắt src nếu dài hơn max_len
-            src = src[:, :max_len]
+            if src.shape[1] < self.config.max_len:
+                pad_length = self.config.max_len - src.shape[1]
+
+                pad = torch.zeros(src.shape[0], pad_length, 3,\
+                                device=src.device, dtype=torch.long)
+                pad[:,:,0] = 3
+
+                src = torch.cat([src, pad], dim=1)
             
             # Tạo mask cho src (padding mask)
             encoder_padding_mask = create_padding_mask(src) # Hàm của bạn
