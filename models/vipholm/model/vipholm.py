@@ -149,7 +149,6 @@ class ViPhoLM(nn.Module):
         self.eval()
         
         device = src.device
-        B, S, _ = src.shape
         if max_len is None:
             max_len = self.config.max_len
 
@@ -171,6 +170,7 @@ class ViPhoLM(nn.Module):
             memory_padding_mask_bool = create_standard_padding_mask(src, 3)
             
             # Qua Embedding & Linear
+            B, S, _ = src.shape
             embeds = self.src_embedding(src)             # (B, S, 3, d_model)
             input_enc = embeds.reshape(B, S, -1)         # (B, S, 3 * d_model)
             input_enc = self.linear(input_enc)           # (B, S, d_model)
