@@ -1,8 +1,8 @@
 vocab:
   type: ViWordVocab
-  TRAIN: datasets/Wikilingual-dataset/train.json
-  DEV: datasets/Wikilingual-dataset/dev.json
-  TEST: datasets/Wikilingual-dataset/test.json
+  TRAIN: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
+  DEV: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
+  TEST: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
   JSON_PATH: datasets/Wikilingual-dataset/train.json
   TOKENIZER: null
   
@@ -15,14 +15,14 @@ vocab:
 dataset:
   train: 
     type: TextSumDatasetPhoneme
-    path: datasets/Wikilingual-dataset/train.json
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/train.json
   dev:
     type: TextSumDatasetPhoneme
-    path: datasets/Wikilingual-dataset/dev.json
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/dev.json
   test: 
     type: TextSumDatasetPhoneme
-    path: datasets/Wikilingual-dataset/test.json
-  batch_size: 8
+    path: /kaggle/input/wikilingual-test-2/datasets/datasets/Wikilingual-dataset/test.json
+  batch_size: 2
   num_workers: 128
 
 model:

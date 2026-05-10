@@ -1,6 +1,6 @@
 import torch
 
-def create_padding_mask(seq, pad_idx):
+def create_padding_mask(seq, pad_idx=3):
     """
     Tạo attention_mask chuẩn cho Longformer.
     Shape: (Batch_Size, Seq_Len)

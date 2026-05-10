@@ -7,8 +7,6 @@ from models.vipholm.utils.clone import clones
 class TransformerEncoderBlock(nn.Module):
     def __init__(self, config, vocab):
         super().__init__()
-        self.num_features = 3
-        self.embedding = clones(nn.Embedding(vocab.vocab_size, config.d_model), self.num_features)
         self.layers = nn.ModuleList([
             EncoderLayer(config, vocab, layer_id=i) 
             for i in range(config.n_layers)

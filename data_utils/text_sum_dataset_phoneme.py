@@ -29,18 +29,18 @@ class TextSumDatasetPhoneme(Dataset):
         source_str = " <nl> ".join(paragraphs) 
     
         source_tokens = preprocess_sentence(source_str)
-        encoded_source = self._vocab.encode_caption(source_tokens)
+        encoded_source = self._vocab.encode_paragraph(source_tokens, 'encoder')
 
         target_str = item["target"]
         target_tokens = preprocess_sentence(target_str)
         
-        encoded_target = self._vocab.encode_caption(target_tokens)
+        encoded_target = self._vocab.encode_paragraph(target_tokens, 'decoder')
 
         shifted_right_label = encoded_target[1:]
        
         return Instance(
             id = key,
-            input_ids = encoded_source,     
-            label = encoded_target, 
-            shifted_right_label = shifted_right_label                        
+            input_ids = encoded_source, # (1, S, 3)    
+            label = encoded_target, # (1, S)
+            shifted_right_label = shifted_right_label  # (1, S)                       
         )

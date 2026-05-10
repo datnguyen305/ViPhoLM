@@ -95,8 +95,8 @@ class TextSumTaskPhoneme(BaseTask):
                 with torch.no_grad():
 
                     prediction = self.model.predict(input_ids)
-                    prediction = self.vocab.decode_batch_caption(prediction, join_words=True)
-                    label = self.vocab.decode_batch_caption(items.label, join_words=True)
+                    prediction = self.vocab.decode_sentence(prediction, join_words=True)
+                    label = self.vocab.decode_sentence(items.label, join_words=True)
 
                     id = items.id[0]
                     gens[id] = prediction[0]

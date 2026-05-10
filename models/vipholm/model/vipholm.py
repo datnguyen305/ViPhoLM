@@ -24,20 +24,17 @@ class ViPhoLM(nn.Module):
         self.PE = PositionalEncoding(self.d_model, max_len=self.config.max_len + 10)
 
         # Encoder 
-        self.num_features = 3 
-        self.src_embedding = clones(nn.Embedding(vocab.vocab_size, config.d_model), self.num_features)
+        self.src_embedding = nn.Embedding(vocab.vocab_size, config.d_model)
         self.linear = nn.Linear(config.d_model * 3, config.d_model)
         self.dropout = nn.Dropout(0.1)
 
         self.encoder = TransformerEncoderBlock(config, self.vocab)
 
         # Decoder  
-        self.tgt_embedding = clones(nn.Embedding(vocab.vocab_size, config.d_model), self.num_features)
+        self.tgt_embedding = nn.Embedding(vocab.vocab_size, config.d_model)
         self.decoder = TransformerDecoderBlock(config, self.vocab)
-        self.phoneme_ff = clones(nn.Linear(self.config.d_model, self.config.d_model), \
-                            self.num_features)
-        self.outs = clones(nn.Linear(config.d_model, vocab.vocab_size), self.num_features)
-        self.losses = clones(nn.CrossEntropyLoss(ignore_index=vocab.unk_idx), self.num_features)
+        self.out = nn.Linear(config.d_model, vocab.vocab_size)
+        self.loss = nn.CrossEntropyLoss(ignore_index=vocab.unk_idx)
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
@@ -55,9 +52,7 @@ class ViPhoLM(nn.Module):
 
     def forward(self, src, trg):
         # src: (B, S, 3)
-        # trg: (B, S, 3)
-        B, S, W = src.shape
-        _, trg_S , _ = trg.shape
+        # trg: (B, S)
         src = src[:, :self.config.max_len]
         trg = trg[:, :self.config.max_len]
 
@@ -72,203 +67,159 @@ class ViPhoLM(nn.Module):
 
             src = torch.cat([src, pad], dim=1)
 
-        # trg (B, S, 3) with S < config.max_len
+        # trg (B, S) with S < config.max_len
         if trg.shape[1] < self.config.max_len:
             pad_length = self.config.max_len - trg.shape[1]
 
-            pad = torch.zeros(trg.shape[0], pad_length, 3, \
+            pad = torch.zeros(trg.shape[0], pad_length,\
                                device=trg.device, dtype=torch.long)
-            pad[:,:,0] = 3
+            
+            trg = torch.cat([trg, pad], dim=1)
 
-            src = torch.cat([trg, pad], dim=1)
-
-        encoder_padding_mask = create_padding_mask(src, 3)
+        encoder_padding_mask = create_padding_mask(src)
         
 
-        target = trg[:, 1:, :]
-        # target: (B, S - 1, 3) [4, 5, 8, ... <eos>]
+        target = trg[:, 1:]
+        # target: (B, S - 1) [4, 5, 8, ... <eos>]
         
-        decoder_input = trg[:, :-1, :]
-        # decoder_input: (B, S - 1, 3) [<bos>, 3, 4, 5, 6, ...]
+        decoder_input = trg[:, :-1]
+        # decoder_input: (B, S - 1) [<bos>, 3, 4, 5, 6, ...]
     
         # src: (B, S, 3)
-
-        embeds = []
-        for i in range(self.num_features):
-            embeds.append(self.dropout(self.src_embedding[i](src[:, :, i])))
-        # embeds: (B, S, d_model) * 3 
-        x = torch.cat(embeds, -1)
-        # embeds: (B, S, d_model * 3)
-        # x: (B, S, d_model * 3)
-        x = self.linear(x)
-        # x: (B, S, d_model)
-         
-        # Positional Encoding
-        x = self.PE(x)
-        # x: (B, S, d_model)
+        embeds = self.dropout(self.src_embedding(src))
+        # embeds: (B, S, 3, d_model)
+        B, S, _ = src.shape
         
-        # Encoder
-        memory = self.encoder(x, encoder_padding_mask) 
+        input = embeds.reshape(B, S, -1) 
+        # input: (B, S, 3*d_model)
+        
+        input = self.linear(input)
+        # input: (B, S, 3*d_model) -> (B, S, d_model)
+        
+        # Positional Encoding
+        input = self.PE(input)
+        # input: (B, S, d_model)
+        
+        memory = self.encoder(
+            input, 
+            encoder_padding_mask
+        )
         # memory: (B, S, d_model)
-
-
-        # Decoder
-        B, S, W = decoder_input.shape
+        
+        
+        #  DECODER
+        
+        # Decoder padding
+        B, S = decoder_input.shape
         decoder_padding_mask = create_standard_padding_mask(decoder_input, 3)
         decoder_causal_mask = create_causal_mask(S, self.config.device)
         memory_padding_mask_bool = create_standard_padding_mask(src, 3)
-        # decoder_input: (B, S, 3)
-        embeds = []
-        for i in range(self.num_features):
-            embeds.append(self.dropout(self.src_embedding[i](decoder_input[:, :, i])))
-        # embeds: (B, S, d_model) * 3 
-        x = torch.cat(embeds, -1)
-        # embeds: (B, S, d_model * 3)
-        # x: (B, S, d_model * 3)
-        x = self.linear(x)
-        # x: (B, S, d_model)
-         
+        
+        """
+            # trg: (B, S), Ex: combinations("t","ɯŋ","˧˩") -> tửng
+            # decoder_input: (B, S - 1, 3), Ex: [<bos>, 3, 4, 5, 6, ...]
+            # target: (B, S - 1, 3) [4, 5, 8, ... <eos>]
+        """
+        
+        embeds = self.dropout(self.tgt_embedding(decoder_input))
+        # embeds: (B, S, d_model)
+        
         # Positional Encoding
-        x = self.PE(x)
-        # x: (B, S, d_model)
+        input = self.PE(embeds)
+        # input: (B, S, d_model)
 
-        x = self.decoder(x, memory, decoder_causal_mask, \
+        logits = self.decoder(input, memory, decoder_causal_mask, \
                          decoder_padding_mask, memory_padding_mask_bool)
-        # x: (B, S, d_model)
+        # logits: (B, S, d_model)
         
-        ff_out = []
-        for i in range(self.num_features):
-            ff_out.append(self.phoneme_ff[i](x))
-        # ff_out: (B, S, d_model) * 3 
-
-        ff_out = torch.stack(ff_out, -1)
-        # ff_out: (B, S, d_model, 3)
-
-        ff_prj = []
-        for i in range(self.num_features):
-            ff_prj.append(self.outs[i](ff_out[:, :, :, i]))
-        # ff_out: (B, S, vocab_size) * 3 
-        ff_prjout = torch.stack(ff_prj, -1)
-        # ff_prjout: (B, S, vocab_size, 3)
-
-        loss_result = []
-
-        for i in range(self.num_features):
-            loss_result.append(
-                self.losses[i](
-                    ff_prjout[:, :, :, i].reshape(-1, self.vocab.vocab_size), 
-                    target[:, :, i].reshape(-1)
-                )
-            )
-        # loss_result: List [loss_initial, loss_rhyme, loss_tone]
-        total_loss = sum(loss_result)
-
-        return 0, total_loss 
-    
-    def predict(self, src):
-        # src: (B, S, 3)
-        src = src[:, :self.config.max_len]
-        B, S, W = src.shape 
-
-        # Padding to config.max_len 
-        # src (B, S, 3) with S < config.max_len
-        if src.shape[1] < self.config.max_len:
-            pad_length = self.config.max_len - src.shape[1]
-
-            pad = torch.zeros(src.shape[0], pad_length, 3,\
-                               device=src.device, dtype=torch.long)
-            pad[:,:,0] = 3
-
-            src = torch.cat([src, pad], dim=1)
-
-        B = src.size(0)
-        encoder_padding_mask = create_padding_mask(src, 3)
-        memory_padding_mask_bool = create_standard_padding_mask(src, 3)
-        # embedding
-        embeds = []
-        for i in range(self.num_features):
-            embeds.append(self.dropout(self.src_embedding[i](src[:, :, i])))
-        x = torch.cat(embeds, -1)
-        x = self.linear(x)
-        # x: (B, S, hidden_size)
-        x = self.PE(x)
-        memory = self.encoder(x, encoder_padding_mask)
-
-        # Decoder initialize 
-        # Initiate decoder's input [<BOS>, <PAD>, <PAD>]
-        decoder_input = torch.empty(B, 1, self.num_features, dtype=torch.long, device=self.config.device)
-        for i in range(self.num_features):
-            if i == 0: 
-                decoder_input[:, :, i].fill_(self.vocab.bos_idx)
-            else: 
-                decoder_input[:, :, i].fill_(self.vocab.pad_idx)
-        # decoder_input: (batch_size, 1, 3)
-
-        # Decoder running 
-        outputs = []
-        for _ in range(self.MAX_LENGTH): 
-            # embedding
-            embeds = []
-            for i in range(self.num_features):
-                embeds.append(self.dropout(self.tgt_embedding[i](decoder_input[:, :, i])))
-            x = torch.cat(embeds, -1)
-            x = self.linear(x)
-            # x: (B, S, hidden_size)
-            x = self.PE(x)
-
-            # Masking
-            trg_mask = create_standard_padding_mask(decoder_input, 3)
-            trg_causal_mask = create_causal_mask(decoder_input.size(1), self.config.device)
-
-            x = self.decoder(x, memory, trg_causal_mask, \
-                         trg_mask, memory_padding_mask_bool)
-            x = x[:, -1:, :]
-            ff_out = []
-            for i in range(self.num_features):
-                ff_out.append(self.phoneme_ff[i](x))
-                # ff_out: (B, S, d_model) * 3 
-
-            ff_out = torch.stack(ff_out, -1)
-            # ff_out: (B, S, d_model, 3)
-
-            ff_prj = []
-            for i in range(self.num_features):
-                ff_prj.append(self.outs[i](ff_out[:, :, :, i]))
-            # ff_out: (B, S, vocab_size) * 3 
-            ff_prjout = torch.stack(ff_prj, -1)
-            # ff_prjout: (B, S, vocab_size, 3)
-            next_token = ff_prjout.argmax(dim=2)
-            # next_token: (1, 1, 3)
-            outputs.append(next_token)
-            decoder_input = torch.cat([decoder_input, next_token], dim = 1)
-
-            if B == 1 and next_token[:, -1, 0] == self.vocab.eos_idx:
-                break
-        outputs = torch.cat(outputs, dim=1) # (1, S, 3)
-
-        return outputs
-            
-            
+        out = self.out(logits)
+        # out: (B, S -1, vocab_size)
+        # target: (B, S - 1)
         
+        loss = self.loss(out.reshape(-1, self.vocab.vocab_size), target.reshape(-1))
+        
+
+        return 0, loss
+    def predict(self, src, max_len=None):
+        """
+        Hàm inference (dự đoán) sinh ra câu đích từ câu nguồn.
+        src: (B, S, 3) - Tensor chứa âm tiết đầu vào đã tách thành (Initial, Rhyme, Tone).
+        """
+        # Chuyển mô hình sang chế độ đánh giá (tắt Dropout)
+        self.eval()
+        
+        device = src.device
+        B, S, _ = src.shape
+        if max_len is None:
+            max_len = self.config.max_len
+
+        with torch.no_grad():
+            # ==========================================
+            # 1. ENCODER PASS (Chỉ chạy 1 lần)
+            # ==========================================
+            # Cắt src nếu dài hơn max_len
+            src = src[:, :max_len]
             
+            # Tạo mask cho src (padding mask)
+            encoder_padding_mask = create_padding_mask(src) # Hàm của bạn
+            memory_padding_mask_bool = create_standard_padding_mask(src, 3)
+            
+            # Qua Embedding & Linear
+            embeds = self.src_embedding(src)             # (B, S, 3, d_model)
+            input_enc = embeds.reshape(B, S, -1)         # (B, S, 3 * d_model)
+            input_enc = self.linear(input_enc)           # (B, S, d_model)
+            
+            # Qua Positional Encoding
+            input_enc = self.PE(input_enc)               # (B, S, d_model)
+            
+            # Lấy Output của Encoder (Memory)
+            memory = self.encoder(input_enc, encoder_padding_mask) # (B, S, d_model)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-    
-
-    
+            # ==========================================
+            # 2. DECODER PASS (Vòng lặp Autoregressive)
+            # ==========================================
+            # Khởi tạo target đầu vào bằng token <bos> (Bắt đầu câu)
+            # Giả sử self.vocab.bos_idx là index của <bos>
+            bos_idx = self.vocab.bos_idx 
+            eos_idx = self.vocab.eos_idx
+            
+            # trg_indices: (B, 1)
+            trg_indices = torch.full((B, 1), bos_idx, device=device, dtype=torch.long)
+            
+            for step in range(max_len):
+                S_trg = trg_indices.shape[1]
+                
+                # Tạo mask cho Decoder
+                decoder_causal_mask = create_causal_mask(S_trg, device)
+                decoder_padding_mask = create_standard_padding_mask(trg_indices, 3) # Hoặc truyền pad_idx thích hợp
+                
+                # Qua Embedding & Positional Encoding
+                trg_embeds = self.tgt_embedding(trg_indices) # (B, S_trg, d_model)
+                dec_input = self.PE(trg_embeds)              # (B, S_trg, d_model)
+                
+                # Truyền qua Decoder
+                logits = self.decoder(
+                    dec_input, 
+                    memory, 
+                    decoder_causal_mask, 
+                    decoder_padding_mask, 
+                    memory_padding_mask_bool
+                ) # (B, S_trg, d_model)
+                
+                # Tính toán xác suất từ vựng
+                out = self.out(logits) # (B, S_trg, vocab_size)
+                
+                # Chỉ lấy dự đoán của token cuối cùng (tại bước hiện tại)
+                next_word_logits = out[:, -1, :] # (B, vocab_size)
+                
+                # Dùng argmax để chọn từ có xác suất cao nhất (Greedy Decoding)
+                next_word = next_word_logits.argmax(dim=-1).unsqueeze(1) # (B, 1)
+                
+                # Ghép từ vừa dự đoán vào chuỗi target để chạy vòng lặp tiếp theo
+                trg_indices = torch.cat([trg_indices, next_word], dim=1)
+                
+                # Tối ưu: Nếu tất cả các câu trong batch đều đã dự đoán ra <eos>, ta dừng sớm
+                if (trg_indices == eos_idx).any(dim=-1).all():
+                    break
+                    
+        return trg_indices

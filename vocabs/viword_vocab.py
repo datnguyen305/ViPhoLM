@@ -16,14 +16,14 @@ class ViWordVocab(Vocab):
 
         self.initialize_special_tokens(config)
         
-        phonemes = self.make_vocab(config)
-        phonemes = list(phonemes)
+        vocab = self.make_vocab(config)
+        vocab = list(vocab)
         self.itos = {
-            i: tok for i, tok in enumerate(self.specials + phonemes)
+            i: tok for i, tok in enumerate(self.specials + vocab)
         }
 
         self.stoi = {
-            tok: i for i, tok in enumerate(self.specials + phonemes)
+            tok: i for i, tok in enumerate(self.specials + vocab)
         }
 
     def initialize_special_tokens(self, config) -> None:
@@ -44,11 +44,10 @@ class ViWordVocab(Vocab):
         return len(self.stoi)
 
     def make_vocab(self, config):
-        # Lấy list đường dẫn từ config (Đã sửa ở bước trước)
         json_paths = [config.TRAIN, config.DEV, config.TEST]
-        phonemes = set()
+        vocab_items = set()
         self.max_sentence_length = 0
-        # Collect token stats from each JSON
+        
         for path in json_paths:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"JSON path not found: {path}")
@@ -59,7 +58,6 @@ class ViWordVocab(Vocab):
             for key in data:
                 item = data[key]
                 
-                
                 raw_source = item["source"]
                 if isinstance(raw_source, dict):
                     paragraphs = [" ".join(p) for _, p in raw_source.items()]
@@ -68,102 +66,154 @@ class ViWordVocab(Vocab):
                     source_text = str(raw_source)
 
                 target_text = item.get("target", "")
-                
                 full_text = source_text + " " + target_text
                 
-
                 words = preprocess_sentence(full_text)
                 
                 for word in words:
                     components = analyse_Vietnamese(word)
                     if components:
-                        phonemes.update([phoneme for phoneme in components if phoneme])
+                        # 1. Add individual phonemes (for the encoder)
+                        for phoneme in components:
+                            if phoneme:
+                                vocab_items.add(phoneme)
+                        # 2. Add the whole component tuple (for the decoder)
+                        vocab_items.add(components)
+                    else:
+                        # 3. Add the raw word if it can't be analyzed
+                        vocab_items.add(word)
 
-                target_text = preprocess_sentence(target_text)
-                if self.max_sentence_length < len(target_text):
-                    self.max_sentence_length = len(target_text)
+                # Update max sentence length based on the target
+                target_words = preprocess_sentence(target_text)
+                if self.max_sentence_length < len(target_words):
+                    self.max_sentence_length = len(target_words)
 
-        return phonemes
-
-    def encode_caption(self, caption: List[str]) -> torch.Tensor:
-        syllables = [
-            (self.bos_idx, self.pad_idx, self.pad_idx)
-        ]
-        for word in caption:
-            components = analyse_Vietnamese(word)
-            if components:
-                syllables.append([
-                    self.stoi[phoneme] if phoneme else self.pad_idx for phoneme in components
-                ])
-            else:
-                syllables.append(
-                    (self.unk_idx, self.pad_idx, self.pad_idx)
-                )
-
-        syllables.append(
-            (self.eos_idx, self.pad_idx, self.pad_idx)
-        )
-
-        vec = torch.tensor(syllables).long()
-
-        return vec
-
-    def decode_caption(self, caption_vec: torch.Tensor, join_words=True):
-        assert caption_vec.dim() == 2
-        syllable_ids = caption_vec.tolist()
+        return vocab_items
+    
+    def encode_paragraph(self, caption: List[str], type=None) -> torch.Tensor:
+        if type == 'encoder':
+            syllables = [
+                (self.bos_idx, self.pad_idx, self.pad_idx)
+            ]
         
-        syllables = [
-            [self.itos[idx] for idx in phoneme_ids]
-            for phoneme_ids in syllable_ids
-        ]
-        
-        sentence = []
-        for phonemes in syllables:
-            initial, rhyme, tone = phonemes
-
-            # Check initial có phải là special_token(bos, eos) không
-            if initial in self.specials:
-                if initial == self.bos_token:
-                    sentence.append(self.bos_token)
-                elif initial == self.eos_token:
-                    sentence.append(self.eos_token)
-                continue
-            
-            # Check phonemes phù hợp cho hàm compose_word
-            clean_initial = initial
-            clean_rhyme = '' if rhyme in self.specials else rhyme
-            clean_tone = '-' if tone in self.specials else tone
-            
-            try:
-                word = compose_word(clean_initial, clean_rhyme, clean_tone)
-                if word:
-                    sentence.append(word)
+            for word in caption:
+                components = analyse_Vietnamese(word)
+                if components:
+                    syllables.append([
+                        self.stoi[phoneme] if phoneme else self.pad_idx for phoneme in components
+                    ])
                 else:
-                    sentence.append(self.unk_token)
-            except Exception as e:
-                sentence.append(self.unk_token)
+                    syllables.append(
+                        (self.stoi[word], self.pad_idx, self.pad_idx)
+                    )
 
-        # Bỏ bos_token, eos_token
-        if len(sentence) > 0:
-            if sentence[0] == self.bos_token:
-                sentence = sentence[1:]
-        if len(sentence) > 0:
-            if sentence[-1] == self.eos_token:
-                sentence = sentence[:-1]
+            syllables.append(
+                (self.eos_idx, self.pad_idx, self.pad_idx)
+            )
 
-        # Bỏ qua các unk_token
-        sentence = [word for word in sentence if word != self.unk_token]
+            vec = torch.tensor(syllables).long()
+            
+        elif type == 'decoder': 
+            vec = [self.bos_idx]
+            for word in caption:
+                combination = analyse_Vietnamese(word)
+                if combination:
+                    vec += [self.stoi[combination]]
+                else:
+                    vec += [self.stoi.get(word, self.unk_idx)]
+            vec += [self.eos_idx]
+            vec = torch.Tensor(vec).long()
 
-        if join_words:
-            return " ".join(sentence)
-        else:
-            return sentence
+        else: 
+            raise ValueError
+            
+        return vec
+    
+    def decode_sentence(self, sentence_vecs: torch.Tensor, join_words: bool = True):
+        sentences = []
 
-    def decode_batch_caption(self, caption_batch: torch.Tensor, join_words=True):
-        assert caption_batch.dim() == 3
-        captions = [
-            self.decode_caption(caption_vec, join_words) for caption_vec in caption_batch
-        ]
+        for vec in sentence_vecs:
+            tokens = []
 
-        return captions
+            for idx in vec.tolist():
+                token = self.itos[idx]
+
+                # bỏ special tokens
+                if word in self.specials:
+                    continue
+                else: 
+                    word = compose_word(token[0], token[1], token[2])
+                    if word is not None:
+                        continue
+                    else: 
+                        word = token[0]
+                tokens.append(word)
+
+            if join_words:
+                sentence = " ".join(tokens)
+            else:
+                sentence = tokens
+
+            sentences.append(sentence)
+
+        return sentences
+    
+    # def decode_caption(self, caption_vec: torch.Tensor, join_words=True):
+    #     assert caption_vec.dim() == 2
+    #     syllable_ids = caption_vec.tolist()
+        
+    #     syllables = [
+    #         [self.itos[idx] for idx in phoneme_ids]
+    #         for phoneme_ids in syllable_ids
+    #     ]
+        
+    #     sentence = []
+    #     for phonemes in syllables:
+    #         initial, rhyme, tone = phonemes
+
+    #         # Check initial có phải là special_token(bos, eos) không
+    #         if initial in self.specials:
+    #             if initial == self.bos_token:
+    #                 sentence.append(self.bos_token)
+    #             elif initial == self.eos_token:
+    #                 sentence.append(self.eos_token)
+    #             continue
+            
+    #         # Check phonemes phù hợp cho hàm compose_word
+    #         clean_initial = initial
+    #         clean_rhyme = '' if rhyme in self.specials else rhyme
+    #         clean_tone = '-' if tone in self.specials else tone
+            
+    #         try:
+    #             word = compose_word(clean_initial, clean_rhyme, clean_tone)
+    #             if word:
+    #                 sentence.append(word)
+    #             else:
+    #                 sentence.append(self.unk_token)
+    #         except Exception as e:
+    #             sentence.append(self.unk_token)
+
+    #     # Bỏ bos_token, eos_token
+    #     if len(sentence) > 0:
+    #         if sentence[0] == self.bos_token:
+    #             sentence = sentence[1:]
+    #     if len(sentence) > 0:
+    #         if sentence[-1] == self.eos_token:
+    #             sentence = sentence[:-1]
+
+    #     # Bỏ qua các unk_token
+    #     sentence = [word for word in sentence if word != self.unk_token]
+
+    #     if join_words:
+    #         return " ".join(sentence)
+    #     else:
+    #         return sentence
+
+    # def decode_batch_caption(self, caption_batch: torch.Tensor, join_words=True):
+    #     assert caption_batch.dim() == 3
+    #     captions = [
+    #         self.decode_caption(caption_vec, join_words) for caption_vec in caption_batch
+    #     ]
+
+    #     return captions
     

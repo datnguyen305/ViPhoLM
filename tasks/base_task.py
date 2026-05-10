@@ -4,6 +4,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import LambdaLR
 from builders.vocab_builder import build_vocab
 from shutil import copyfile
+import json 
 
 from utils.logging_utils import setup_logger
 from builders.model_builder import build_model
@@ -31,7 +32,7 @@ class BaseTask:
         else:
             self.logger.info("Loading vocab from %s" % os.path.join(self.checkpoint_path, "vocab.bin"))
             self.vocab = pickle.load(open(os.path.join(self.checkpoint_path, "vocab.bin"), "rb"))
-
+        self.print_vocab_elements(limit=50)
         self.logger.info("Loading data")
         self.load_datasets(config.dataset)
         self.create_dataloaders(config)
@@ -160,3 +161,67 @@ class BaseTask:
 
     def get_predictions(self, dataset, get_scores=True):
         raise NotImplementedError
+    
+    def print_vocab_elements(self, output_path: str = "vocab.json", limit: int = 50):
+        self.logger.info(f"--- Saving first {limit} elements of vocab to {output_path} ---")
+
+        result = {}
+
+        # 1. itos (ViWordVocab)
+        if hasattr(self.vocab, 'itos'):
+            result["type"] = "itos"
+            result["items"] = []
+            for i in range(min(limit, len(self.vocab.itos))):
+                result["items"].append({
+                    "id": i,
+                    "token": self.vocab.itos[i]
+                })
+
+        # 2. SentencePiece
+        elif hasattr(self.vocab, 'sp'):
+            result["type"] = "sentencepiece"
+            result["languages"] = {}
+
+            # dict multi-language
+            if isinstance(self.vocab.sp, dict):
+                for lang, sp_processor in self.vocab.sp.items():
+                    lang_items = []
+                    for i in range(min(limit, sp_processor.get_piece_size())):
+                        lang_items.append({
+                            "id": i,
+                            "token": sp_processor.id_to_piece(i)
+                        })
+                    result["languages"][lang] = lang_items
+
+            # single processor
+            else:
+                items = []
+                for i in range(min(limit, self.vocab.sp.get_piece_size())):
+                    items.append({
+                        "id": i,
+                        "token": self.vocab.sp.id_to_piece(i)
+                    })
+                result["items"] = items
+
+        # 3. stoi dict
+        elif hasattr(self.vocab, 'stoi'):
+            result["type"] = "stoi"
+            result["items"] = []
+
+            items = list(self.vocab.stoi.items())
+            for i in range(min(limit, len(items))):
+                token, idx = items[i]
+                result["items"].append({
+                    "id": idx,
+                    "token": token
+                })
+
+        else:
+            result["error"] = "Unknown vocab structure"
+            result["debug"] = dir(self.vocab)
+
+        # save to json file
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+
+        self.logger.info(f"Saved vocab preview to {output_path}")

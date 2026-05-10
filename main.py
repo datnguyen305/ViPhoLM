@@ -1,4 +1,5 @@
 from builders.task_builder import build_task
+from builders.vocab_builder import build_vocab
 from configs.utils import get_config
 from argparse import ArgumentParser
 import os
