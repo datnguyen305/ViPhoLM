@@ -139,7 +139,7 @@ class ViWordVocab(Vocab):
                 token = self.itos[idx]
 
                 # bỏ special tokens
-                if word in self.specials:
+                if token in self.specials:
                     continue
                 else: 
                     word = compose_word(token[0], token[1], token[2])
